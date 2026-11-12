@@ -50,7 +50,7 @@ Config changes load without a restart. If the panel doesn't appear, run `/reload
 ```sh
 git clone https://github.com/wannabemrrobot/opencode-desktop-notes.git
 cd opencode-desktop-notes
-bun install && bun run build
+bun install && bun run bundle
 ```
 
 Then point your global config at the folder:
@@ -152,6 +152,7 @@ Hover a todo and press **Agent** to hand it to the agent with optional instructi
 
 ```sh
 bun install
+bun run bundle     # build dist/gui-experimental.cjs
 bun run dev        # rebuild on every change; OpenCode reloads the panel by itself
 bun run typecheck
 bun run demo       # build the screenshot preview in demo/dist
