@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>opencode-desktop-notes preview</title>
+    <style>
+      :root { color-scheme: light; --background-base: #f8f8f8; --panel: #ffffff; --text: #1a1a1a; --muted: #6b6b6b; --line: #e5e5e5;
+        --border-weak-base: #e5e5e5; --border-selected: #2f6bff; --border-weak-selected: #2f6bff40;
+        --shadow-xs-border-base: 0 0 0 1px #00000024, 0 1px 2px #0000000d; }
+      [data-theme="dark"] { color-scheme: dark; --background-base: #101010; --panel: #161616; --text: #e8e8e8; --muted: #9a9a9a; --line: #282828;
+        --border-weak-base: #282828; --border-selected: #6b93ff; --border-weak-selected: #6b93ff40;
+        --shadow-xs-border-base: 0 0 0 1px #ffffff2a; }
+      html, body { margin: 0; background: var(--background-base); color: var(--text); font: 13px/1.45 Inter, -apple-system, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      .frame { width: 440px; height: 820px; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--line); }
+      .tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+      .tab { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; color: var(--muted); }
+      .tab.active { background: color-mix(in srgb, currentColor 7%, transparent); color: var(--text); }
+      .tab .x, .plus { opacity: .5; font-size: 14px }
+      .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .body > * { flex: 1; min-height: 0 }
+      .ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; border: 0; font: inherit; font-size: 12.5px; cursor: pointer;
+        background: var(--panel); color: var(--text); box-shadow: var(--shadow-xs-border-base); white-space: nowrap }
+      .ui-btn[data-size="small"] { height: 28px; padding: 0 9px }
+      .ui-btn[data-variant="contrast"] { background: var(--text); color: var(--panel); box-shadow: none }
+      .ui-btn[data-variant="ghost"], .ui-btn[data-variant="ghost-muted"] { background: transparent; box-shadow: none; color: var(--muted) }
+      .ui-btn[data-variant="danger"] { color: #e5484d }
+      .ui-btn:disabled { opacity: .5 }
+      .ui-input { box-sizing: border-box; height: 30px; padding: 0 10px; border-radius: 6px; border: 0; font: inherit; background: var(--panel); color: var(--text); box-shadow: var(--shadow-xs-border-base); outline: 0 }
+      .ui-input::placeholder { color: var(--muted) }
+      .ui-switch { position: relative; width: 30px; height: 18px; border-radius: 9px; border: 0; padding: 0; background: color-mix(in srgb, currentColor 22%, transparent); cursor: pointer }
+      .ui-switch span { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s }
+      .ui-switch[aria-checked="true"] { background: var(--border-selected) } .ui-switch[aria-checked="true"] span { left: 14px }
+      .ui-md p { margin: 0 0 6px } .ui-md p:last-child { margin: 0 } .ui-md ul { margin: 0 0 6px; padding-left: 18px }
+      .ui-md code { font: 12px ui-monospace, Menlo, monospace; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent) }
+      .demo-hover .btwn-acts, .demo-hover .btwn-todo-acts { opacity: 1 !important; pointer-events: auto !important }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
