@@ -5,8 +5,7 @@ A notes, side-question and todo panel for [OpenCode Desktop](https://opencode.ai
 Jot things down while the agent works, ask the model side questions without touching the main chat, quote parts of the conversation, keep a todo list, and send any of it back to the agent when you're ready.
 
 <p align="center">
-  <img src="docs/screenshots/notes.png" width="380" alt="The notes panel with plain notes, an annotated note and two /btw answers">
-  <img src="docs/screenshots/dark.png" width="380" alt="The same panel in a dark theme">
+  <img src="docs/demo.gif" width="960" alt="Adding notes, annotating a chat passage, asking /btw, using todos, session context, search and Notes only in OpenCode Desktop">
 </p>
 
 > [!NOTE]
@@ -93,19 +92,18 @@ Every row has a small badge in its top-right corner:
 - **Model picker:** the picker inside the prompt box chooses the model for /btw. **Session model** uses the session's own context. Any other model gets the chat's text (not tool calls or reasoning) plus your notes.
 - **Times:** every row shows when it was added, such as "Today, 10:04".
 
-Hover a row for its actions:
+Hover a row to show its action buttons:
 
-- **Ask /btw** or **Follow-up /btw**: uses the text box as the question, or asks in a dialog.
-- **Send to chat**: posts the note or answer to the agent as a queued message. Anything in the text box is added as your comment.
-- **Delete**
+| Button | What it does |
+|---|---|
+| **Ask /btw** (notes) or **Follow-up /btw** (answers) | Asks a side question about that row. Uses the text box as the question, or asks in a dialog if it's empty. |
+| **Send to chat** | Posts the row to the agent as a queued message, with anything in the text box added as your comment. |
+| **Delete** | Removes the row. |
 
 ### Annotate the chat
 
 Select text in the conversation, then press **Annotate** (or <kbd>⌘</kbd><kbd>⌥</kbd><kbd>N</kbd>). The quote attaches to the next note or /btw you write. Click a quote to scroll back to that spot in the chat.
 
-<p align="center">
-  <img src="docs/screenshots/prompt.png" width="380" alt="Writing a question with the model picker inside the prompt box">
-</p>
 
 ### Todos
 
@@ -113,17 +111,11 @@ Open **Todo** under the search bar. Add items, tick them off, clear finished one
 
 Hover a todo and press **Agent** to hand it to the agent with optional instructions. It goes in as a queued message, so a running turn finishes first.
 
-<p align="center">
-  <img src="docs/screenshots/todo.png" width="380" alt="The todo list, with one todo being sent to the agent with instructions">
-</p>
 
 ### Session context
 
 **Note session context** shows the session's model, context usage, tokens in and out, cost, and how many notes and /btw questions the tab holds. Only one of **Todo** and **Note session context** is open at a time.
 
-<p align="center">
-  <img src="docs/screenshots/context.png" width="380" alt="Session context chips: model, context ring, tokens, cost and counts">
-</p>
 
 ### Search, sort and export
 
@@ -133,9 +125,6 @@ Hover a todo and press **Agent** to hand it to the agent with optional instructi
 - **Export** saves what's on screen as a Markdown file.
 - **Rename** gives the tab its own title.
 
-<p align="center">
-  <img src="docs/screenshots/search.png" width="380" alt="Searching for 'cache' with matches highlighted">
-</p>
 
 ### Session and project tabs
 
@@ -155,12 +144,12 @@ bun install
 bun run bundle     # build dist/gui-experimental.cjs
 bun run dev        # rebuild on every change; OpenCode reloads the panel by itself
 bun run typecheck
-bun run demo       # build the screenshot preview in demo/dist
+bun run demo       # build a browser preview with a mock host, in demo/dist
 ```
 
 - `src/gui.tsx` is the whole plugin. It builds to `dist/gui-experimental.cjs`, the file OpenCode loads.
 - `dist/` is committed so installing from GitHub needs no build step. Rebuild before you commit.
-- `demo/` runs the real panel against a small mock of the OpenCode host, which is how the screenshots are made. Serve `demo/dist` and open `index.html?shot=hero`, or use `todo`, `context`, `search` or `annotate`. Add `&theme=dark` for the dark theme.
+- `demo/` runs the real panel against a small mock of the OpenCode host, for quick UI work without the desktop app. Build it with `bun run demo`, serve `demo/dist`, and open `index.html` (add `?theme=dark` for the dark theme).
 
 ## License
 

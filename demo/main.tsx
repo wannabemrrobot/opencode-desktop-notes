@@ -4,7 +4,6 @@ import plugin from "../src/gui"
 import { ui } from "./mock-gui"
 
 const params = new URLSearchParams(location.search)
-const shot = params.get("shot") ?? "hero"
 document.documentElement.dataset.theme = params.get("theme") ?? "light"
 
 const day = (h: number, m: number, daysAgo = 0) => {
@@ -135,35 +134,3 @@ render(
   document.getElementById("app")!,
 )
 
-const click = (sel: string, text?: string) => {
-  const el = [...document.querySelectorAll<HTMLElement>(sel)].find((e) => !text || e.textContent?.trim().startsWith(text))
-  el?.click()
-}
-requestAnimationFrame(() => {
-  if (shot === "todo") {
-    click(".btwn-chd button", "Todo")
-    requestAnimationFrame(() => {
-      document.querySelectorAll(".btwn-todo")[0]?.classList.add("demo-hover")
-      click(".btwn-todo-acts button", "Agent")
-      requestAnimationFrame(() => {
-        const ta = document.querySelector<HTMLTextAreaElement>(".btwn-todo-send textarea")!
-        ta.value = "Use an LRU with 500 entries. Add a test."
-        ta.dispatchEvent(new Event("input", { bubbles: true }))
-        ta.blur()
-      })
-    })
-  }
-  if (shot === "context") click(".btwn-chd button", "Note session context")
-  if (shot === "search") {
-    const i = document.querySelector<HTMLInputElement>(".btwn-search input")!
-    i.value = "cache"
-    i.dispatchEvent(new Event("input", { bubbles: true }))
-  }
-  if (shot === "hero" || shot === "dark") document.querySelectorAll(".btwn-row")[3]?.classList.add("demo-hover")
-  if (shot === "annotate") {
-    const ta = document.querySelector<HTMLTextAreaElement>(".btwn-ta")!
-    ta.value = "Is this safe with several replicas?"
-    ta.dispatchEvent(new Event("input", { bubbles: true }))
-  }
-  setTimeout(() => document.body.setAttribute("data-ready", "1"), 300)
-})
