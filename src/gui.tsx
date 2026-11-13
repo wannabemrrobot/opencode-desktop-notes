@@ -81,6 +81,41 @@ function toMarkdown(root: Node): string {
     .replace(/^\n+|\n+$/g, "")
     .replace(/([^\n])\n(?=[^\n])/g, (m, c, i, all) => (/^\s*([-*+]|\d+[.)]) /.test(all.slice(i + 2)) ? m : `${c}  \n`))
 }
+function toEditorHtml(md: string): string {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+  const inl = (t: string) =>
+    esc(t)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/~~([^~]+)~~/g, "<s>$1</s>")
+      .replace(/(^|[^\w])_([^_]+)_(?!\w)/g, "$1<em>$2</em>")
+      .replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\w)/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\(([^)\s]*)\)/g, '<a href="$2">$1</a>')
+  const out: string[] = []
+  let plain: string[] = []
+  let list: { tag: "ul" | "ol"; items: string[] } | undefined
+  const flush = () => {
+    if (plain.length) out.push(plain.map(inl).join("\n"))
+    if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inl(i)}</li>`).join("")}</${list.tag}>`)
+    plain = []
+    list = undefined
+  }
+  for (const line of md.replace(/ {2,}\n/g, "\n").split("\n")) {
+    const m = line.match(/^\s*(?:([-*+])|\d+[.)])\s+(.*)$/)
+    if (m) {
+      const tag = m[1] ? "ul" : "ol"
+      if (plain.length || (list && list.tag !== tag)) flush()
+      list ??= { tag, items: [] }
+      list.items.push(m[2])
+    } else {
+      if (list) flush()
+      plain.push(line)
+    }
+  }
+  flush()
+  return out.join("")
+}
+
 // Markdown typed inline, matched just before the caret: **bold**, _italic_ / *italic*, ~~strike~~, `code`.
 const INLINE_RULES: [RegExp, string][] = [
   [/\*\*([^*\n]+)\*\*$/, "strong"],
@@ -212,6 +247,8 @@ const css = `
 .btwn-box .btwn-quote{margin:8px 10px 0;max-height:6em}
 .btwn-ta:focus,.btwn-ta:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
 .btwn-box{position:relative}
+.btwn-editbar{display:flex;align-items:center;justify-content:space-between;padding:0 2px 0 4px;font-size:12px;color:var(--text-interactive-base,#4c8dff)}
+.btwn-row[data-editing=true]{box-shadow:0 0 0 1px var(--border-selected,#4c8dff)}
 .btwn-ta{display:block;box-sizing:border-box;width:100%;min-height:72px;max-height:33vh;overflow-y:auto;padding:10px 12px;outline:0;font:inherit;font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
 .btwn-ta[data-empty=true]::before{content:attr(data-placeholder);position:absolute;pointer-events:none;color:color-mix(in srgb,currentColor 45%,transparent)}
 .btwn-ta p,.btwn-ta div{margin:0}
@@ -642,8 +679,37 @@ export default Plugin.define({
           break
         }
       }
+      const [editing, setEditing] = createSignal<string | null>(null)
+      const loadEditor = (md: string) => {
+        if (!edEl) return
+        edEl.innerHTML = toEditorHtml(md)
+        sync()
+        edEl.focus()
+        const r = document.createRange()
+        r.selectNodeContents(edEl)
+        r.collapse(false)
+        getSelection()?.removeAllRanges()
+        getSelection()?.addRange(r)
+      }
+      const startEdit = (item: Item) => {
+        setEditing(item.id)
+        setPendingQuote(item.quote)
+        loadEditor(item.text)
+      }
+      const cancelEdit = () => {
+        setEditing(null)
+        setDraft("")
+        setPendingQuote("")
+      }
       const addNote = () => {
         const text = draft().trim()
+        const id = editing()
+        if (id) {
+          if (!text) return void ctx.toast.show({ variant: "error", title: "A note can't be empty. Delete it instead." })
+          store().set({ items: items().map((i) => (i.id === id ? { ...i, text, quote: pendingQuote() } : i)) })
+          cancelEdit()
+          return
+        }
         if (!text) return
         const asTodo = text.match(todoCommand)
         if (asTodo) {
@@ -773,7 +839,10 @@ export default Plugin.define({
         })
         if (ok) store().set({ items: [] })
       }
-      const remove = (id: string) => store().set({ items: items().filter((i) => i.id !== id) })
+      const remove = (id: string) => {
+        if (editing() === id) cancelEdit()
+        store().set({ items: items().filter((i) => i.id !== id) })
+      }
       const annotate = () => {
         if (lastSelection) setPendingQuote(lastSelection)
         else ctx.toast.show({ variant: "error", title: "Select some chat text first" })
@@ -1014,7 +1083,7 @@ export default Plugin.define({
             <Show when={shown().length || pending().length} fallback={<div class="btwn-empty">{query() ? "No matches" : "No notes yet"}</div>}>
               <For each={shown()}>
                 {(item) => (
-                  <div data-id={item.id} class={`btwn-row ${item.kind === "btw" ? "btwn-btw" : ""}`}>
+                  <div data-id={item.id} class={`btwn-row ${item.kind === "btw" ? "btwn-btw" : ""}`} data-editing={editing() === item.id}>
                     <span class="btwn-badge" title={item.kind === "btw" ? (item.quote ? "Annotated /btw" : "/btw") : item.quote ? "Annotated note" : "Note"}>
                       <Show when={item.quote || item.kind === "note"}>
                         {item.quote ? <Quote size={13} /> : <SquarePen size={13} />}
@@ -1037,6 +1106,11 @@ export default Plugin.define({
                       {fmtTime(item.time)}
                     </div>
                     <div class="btwn-acts">
+                      <Show when={item.kind === "note"}>
+                        <ui.Button onClick={() => startEdit(item)}>
+                          <Lbl icon={Pencil} text="Edit" />
+                        </ui.Button>
+                      </Show>
                       <ui.Button onClick={() => void askAbout(item)}>
                         <Lbl icon={MessageCircleQuestion} text={item.kind === "btw" ? "Follow-up /btw" : "Ask /btw"} />
                       </ui.Button>
@@ -1063,6 +1137,17 @@ export default Plugin.define({
             </Show>
           </div>
           <div class="btwn-in">
+            <Show when={editing()}>
+              <div class="btwn-editbar">
+                <span class="btwn-lbl">
+                  <Pencil size={13} />
+                  Editing note
+                </span>
+                <ui.Button size="small" variant="ghost-muted" onClick={cancelEdit}>
+                  Cancel
+                </ui.Button>
+              </div>
+            </Show>
             <div class="btwn-box">
               <Show when={pendingQuote()}>
                 <div class="btwn-quote" onClick={() => setPendingQuote("")} title="Click to remove">
@@ -1131,6 +1216,11 @@ export default Plugin.define({
                     if (key === "k") formats.link()
                     return
                   }
+                  if (e.key === "Escape" && editing()) {
+                    e.preventDefault()
+                    cancelEdit()
+                    return
+                  }
                   if (e.key !== "Enter" || e.isComposing) return
                   if (e.shiftKey) {
                     // Shift+Enter: a new list item inside a list (an empty one ends the list), else a line break.
@@ -1167,7 +1257,9 @@ export default Plugin.define({
             <div class="btwn-grid btwn-grid3 btwn-bottom">
               <div class="btwn-cell">
                 <ui.Button size="small" variant="contrast" onClick={addNote}>
-                  <Lbl icon={Plus} text="Add note" />
+                  <Show when={editing()} fallback={<Lbl icon={Plus} text="Add note" />}>
+                    <Lbl icon={SquareCheck} text="Save" />
+                  </Show>
                 </ui.Button>
               </div>
               <div class="btwn-cell">
