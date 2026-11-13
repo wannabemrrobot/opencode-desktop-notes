@@ -47,47 +47,48 @@ const transcript = (messages: readonly any[]) => {
 const fmtTokens = (n: number) =>
   n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n)
 const RING = 2 * Math.PI * 7.5
-// Live Markdown styling for the prompt box. The real textarea sits on top with transparent text, so
-// typing, the caret, selection, undo and IME all stay native. Every style here keeps glyph widths
-// identical to plain text (no size, weight or font changes), or the caret would drift.
-const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-const mk = (cls: string, t: string) => `<span class="${cls}">${escapeHtml(t)}</span>`
-const slant = (html: string) => html.replace(/(^|>)([^<]+)(?=<|$)/g, (_, a, t) => a + t.replace(/\S+/g, (w: string) => `<span class="md-sk">${w}</span>`))
-const INLINE: [RegExp, (m: RegExpExecArray) => string][] = [
-  [/`([^`\n]+)`/, (m) => mk("md-mk", "`") + mk("md-code", m[1]) + mk("md-mk", "`")],
-  [/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/, (m) => { const t = m[0].slice(0, 2); return mk("md-mk", t) + `<span class="md-b">${inline(m[1] ?? m[2])}</span>` + mk("md-mk", t) }],
-  [/~~([^~\n]+?)~~/, (m) => mk("md-mk", "~~") + `<span class="md-s">${inline(m[1])}</span>` + mk("md-mk", "~~")],
-  [/(?<![\w*])\*(?!\s)([^*\n]+?)\*(?!\w)|(?<!\w)_(?!\s)([^_\n]+?)_(?!\w)/, (m) => { const t = m[0][0]; return mk("md-mk", t) + slant(inline(m[1] ?? m[2])) + mk("md-mk", t) }],
-  [/\[([^\]\n]+)\]\(([^)\s]*)\)/, (m) => mk("md-mk", "[") + `<span class="md-a">${inline(m[1])}</span>` + mk("md-mk", `](${m[2]})`)],
-  [/https?:\/\/[^\s)]+/, (m) => mk("md-a", m[0])],
-]
-function inline(t: string): string {
-  let best: { i: number; m: RegExpExecArray; f: (m: RegExpExecArray) => string } | undefined
-  for (const [re, f] of INLINE) {
-    const m = re.exec(t)
-    if (m && (!best || m.index < best.i)) best = { i: m.index, m, f }
+// The prompt box is a small rich-text editor (contenteditable). It is read back as Markdown, so notes
+// are stored and sent exactly as before.
+const ZW = "\u200B"
+function toMarkdown(root: Node): string {
+  const inline = (n: Node): string => {
+    if (n.nodeType === 3) return (n as Text).data.replace(/\u200B/g, "").replace(/\u00A0/g, " ")
+    if (n.nodeType !== 1) return ""
+    const el = n as HTMLElement
+    const tag = el.tagName
+    if (tag === "BR") return "\n"
+    const inner = [...el.childNodes].map(inline).join("")
+    if (!inner.trim()) return inner
+    const style = el.style
+    if (tag === "STRONG" || tag === "B" || Number(style.fontWeight) >= 600 || style.fontWeight === "bold") return `**${inner}**`
+    if (tag === "EM" || tag === "I" || style.fontStyle === "italic") return `_${inner}_`
+    if (tag === "S" || tag === "STRIKE" || tag === "DEL" || style.textDecorationLine.includes("line-through")) return `~~${inner}~~`
+    if (tag === "CODE") return "`" + inner + "`"
+    if (tag === "A") return `[${inner}](${el.getAttribute("href") ?? ""})`
+    if (tag === "UL" || tag === "OL") return "\n" + list(el) + "\n"
+    if (/^(DIV|P|H[1-6]|BLOCKQUOTE|LI)$/.test(tag)) return "\n" + inner + "\n"
+    return inner
   }
-  if (!best) return escapeHtml(t)
-  return escapeHtml(t.slice(0, best.i)) + best.f(best.m) + inline(t.slice(best.i + best.m[0].length))
+  const list = (el: HTMLElement) =>
+    [...el.children]
+      .filter((c) => c.tagName === "LI")
+      .map((li, i) => (el.tagName === "OL" ? `${i + 1}. ` : "- ") + [...li.childNodes].map(inline).join("").trim())
+      .join("\n")
+  return [...root.childNodes]
+    .map(inline)
+    .join("")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+|\n+$/g, "")
+    .replace(/([^\n])\n(?=[^\n])/g, (m, c, i, all) => (/^\s*([-*+]|\d+[.)]) /.test(all.slice(i + 2)) ? m : `${c}  \n`))
 }
-const highlight = (text: string) => {
-  let fence = false
-  const out = text.split("\n").map((line) => {
-    if (/^\s*```/.test(line)) {
-      fence = !fence
-      return mk("md-mk md-pre", line)
-    }
-    if (fence) return mk("md-pre", line)
-    let m: RegExpMatchArray | null
-    if ((m = line.match(/^(#{1,6} )(.*)$/))) return mk("md-mk", m[1]) + `<span class="md-h">${inline(m[2])}</span>`
-    if ((m = line.match(/^(\s*>\s?)(.*)$/))) return mk("md-mk", m[1]) + `<span class="md-q">${slant(inline(m[2]))}</span>`
-    if ((m = line.match(/^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s)?(.*)$/)))
-      return escapeHtml(m[1]) + mk("md-li", m[2]) + m[3] + (m[4] ? mk("md-li", m[4]) : "") + inline(m[5])
-    return inline(line)
-  })
-  // A trailing newline needs something after it, or the last empty line has no height.
-  return out.join("\n") + (text.endsWith("\n") ? " " : "")
-}
+// Markdown typed inline, matched just before the caret: **bold**, _italic_ / *italic*, ~~strike~~, `code`.
+const INLINE_RULES: [RegExp, string][] = [
+  [/\*\*([^*\n]+)\*\*$/, "strong"],
+  [/~~([^~\n]+)~~$/, "s"],
+  [/`([^`\n]+)`$/, "code"],
+  [/(?:^|[^\w*])\*([^*\s][^*\n]*)\*$/, "em"],
+  [/(?:^|[^\w_])_([^_\s][^_\n]*)_$/, "em"],
+]
 
 const fmtTime = (t: number) => {
   const d = new Date(t)
@@ -210,21 +211,13 @@ const css = `
 .btwn-box:focus-within{box-shadow:var(--shadow-xs-border-select,0 0 0 1px var(--border-selected,#004afffc),0 0 0 3px var(--border-weak-selected,#0167ff4a))}
 .btwn-box .btwn-quote{margin:8px 10px 0;max-height:6em}
 .btwn-ta:focus,.btwn-ta:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
-.btwn-ed{position:relative}
-.btwn-ta,.btwn-hl{box-sizing:border-box;width:100%;margin:0;padding:10px 12px;border:0;font:inherit;font-size:13.5px;line-height:1.45;letter-spacing:normal;font-kerning:none;font-variant-ligatures:none;tab-size:4;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;scrollbar-gutter:stable}
-.btwn-ta{position:relative;z-index:1;display:block;min-height:72px;max-height:33vh;field-sizing:content;overflow-y:auto;outline:0;resize:none;background:transparent;color:inherit;caret-color:auto;-webkit-text-fill-color:transparent}
-.btwn-ta::selection{background:color-mix(in srgb,var(--border-selected,#3b82f6) 28%,transparent);-webkit-text-fill-color:transparent}
-.btwn-hl{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:inherit}
-.btwn-hl .md-mk{opacity:.4}
-.btwn-hl .md-b,.btwn-hl .md-h{-webkit-text-stroke:.45px currentColor}
-.btwn-hl .md-h{color:var(--text-strong,inherit)}
-.btwn-hl .md-sk{display:inline-block;transform:skewX(-9deg)}
-.btwn-hl .md-s{text-decoration:line-through;text-decoration-color:color-mix(in srgb,currentColor 60%,transparent)}
-.btwn-hl .md-code,.btwn-hl .md-pre{border-radius:3px;background:color-mix(in srgb,currentColor 11%,transparent)}
-.btwn-hl .md-a{color:var(--text-interactive-base,#4c8dff);text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent)}
-.btwn-hl .md-li{color:var(--text-interactive-base,#4c8dff)}
-.btwn-hl .md-q{opacity:.75}
-.btwn-ta::placeholder{color:color-mix(in srgb,currentColor 45%,transparent);-webkit-text-fill-color:color-mix(in srgb,currentColor 45%,transparent)}
+.btwn-box{position:relative}
+.btwn-ta{display:block;box-sizing:border-box;width:100%;min-height:72px;max-height:33vh;overflow-y:auto;padding:10px 12px;outline:0;font:inherit;font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
+.btwn-ta[data-empty=true]::before{content:attr(data-placeholder);position:absolute;pointer-events:none;color:color-mix(in srgb,currentColor 45%,transparent)}
+.btwn-ta p,.btwn-ta div{margin:0}
+.btwn-ta ul,.btwn-ta ol{margin:2px 0;padding-left:20px}
+.btwn-ta code{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:.92em;padding:1px 4px;border-radius:4px;background:color-mix(in srgb,currentColor 11%,transparent)}
+.btwn-ta a{color:var(--text-interactive-base,#4c8dff);text-decoration:underline}
 .btwn-empty{opacity:.55;text-align:center;padding:24px 8px}
 `
 
@@ -525,57 +518,129 @@ export default Plugin.define({
         reveal(item.id)
       }
 
-      let taEl: HTMLTextAreaElement | undefined
-      let hlEl: HTMLDivElement | undefined
-      // Keep the styled copy scrolled with the textarea after every change (field-sizing can scroll it).
+      let edEl: HTMLDivElement | undefined
+      const [empty, setEmpty] = createSignal(true)
+      const sync = () => {
+        if (!edEl) return
+        const md = toMarkdown(edEl)
+        setEmpty(!md && !edEl.querySelector("li"))
+        if (md !== draft()) setDraft(md)
+      }
+      // Clearing the draft (after a note is added or sent) clears the editor too.
       createEffect(() => {
-        draft()
-        queueMicrotask(() => taEl && hlEl && (hlEl.scrollTop = taEl.scrollTop))
+        if (draft() === "" && edEl && toMarkdown(edEl) !== "") {
+          edEl.innerHTML = ""
+          setEmpty(true)
+        }
       })
-      const edit = (next: string, start: number, end: number) => {
-        setDraft(next)
-        queueMicrotask(() => {
-          if (!taEl) return
-          taEl.value = next
-          taEl.focus()
-          taEl.setSelectionRange(start, end)
-        })
+      const exec = (cmd: string, value?: string) => {
+        edEl?.focus()
+        document.execCommand(cmd, false, value)
+        sync()
       }
-      const wrap = (before: string, after = before, placeholder = "text") => {
-        const el = taEl
-        if (!el) return
-        const v = el.value, a = el.selectionStart, b = el.selectionEnd
-        const sel = v.slice(a, b) || placeholder
-        // Toggle off when the selection is already wrapped.
-        if (v.slice(a - before.length, a) === before && v.slice(b, b + after.length) === after)
-          return edit(v.slice(0, a - before.length) + v.slice(a, b) + v.slice(b + after.length), a - before.length, b - before.length)
-        edit(v.slice(0, a) + before + sel + after + v.slice(b), a + before.length, a + before.length + sel.length)
+      const closest = (tag: string) => {
+        const n = getSelection()?.anchorNode
+        const el = (n && (n.nodeType === 1 ? (n as Element) : n.parentElement))?.closest(tag)
+        return el && edEl?.contains(el) ? el : null
       }
-      const prefixLines = (prefix: string) => {
-        const el = taEl
-        if (!el) return
-        const v = el.value
-        const a = v.lastIndexOf("\n", el.selectionStart - 1) + 1
-        const bi = v.indexOf("\n", el.selectionEnd)
-        const b = bi === -1 ? v.length : bi
-        const lines = v.slice(a, b).split("\n")
-        const on = lines.every((l) => l.startsWith(prefix))
-        const out = lines.map((l) => (on ? l.slice(prefix.length) : prefix + l)).join("\n")
-        edit(v.slice(0, a) + out + v.slice(b), a, a + out.length)
+      const caretAfter = (node: Node) => {
+        const gap = document.createTextNode(ZW)
+        node.parentNode!.insertBefore(gap, node.nextSibling)
+        const r = document.createRange()
+        r.setStart(gap, 1)
+        r.collapse(true)
+        const sel = getSelection()!
+        sel.removeAllRanges()
+        sel.addRange(r)
       }
-      const link = () => {
-        const el = taEl
-        if (!el) return
-        const v = el.value, a = el.selectionStart, b = el.selectionEnd
-        const label = v.slice(a, b) || "link"
-        const text = `[${label}](url)`
-        edit(v.slice(0, a) + text + v.slice(b), a + label.length + 3, a + label.length + 6)
+      const toggleCode = () => {
+        edEl?.focus()
+        const inCode = closest("code")
+        if (inCode) {
+          inCode.replaceWith(document.createTextNode(inCode.textContent ?? ""))
+          return sync()
+        }
+        const sel = getSelection()
+        if (!sel?.rangeCount) return
+        const r = sel.getRangeAt(0)
+        const code = document.createElement("code")
+        code.textContent = r.toString() || "code"
+        r.deleteContents()
+        r.insertNode(code)
+        if (r.collapsed && code.textContent === "code") {
+          const pick = document.createRange()
+          pick.selectNodeContents(code)
+          sel.removeAllRanges()
+          sel.addRange(pick)
+        } else caretAfter(code)
+        sync()
       }
-      const shortcuts: Record<string, () => void> = {
-        b: () => wrap("**"),
-        i: () => wrap("_"),
-        e: () => wrap("`", "`", "code"),
-        k: link,
+      const addLink = async () => {
+        const sel = getSelection()
+        const saved = sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined
+        const inLink = closest("a")
+        if (inLink) {
+          inLink.replaceWith(document.createTextNode(inLink.textContent ?? ""))
+          return sync()
+        }
+        const url = (await ctx.dialogs.prompt({ title: "Add link", placeholder: "https://", submit: "Add" }))?.trim()
+        edEl?.focus()
+        if (!url) return
+        if (saved) {
+          sel!.removeAllRanges()
+          sel!.addRange(saved)
+        }
+        if (saved && !saved.collapsed) exec("createLink", url)
+        else exec("insertHTML", `<a href="${url.replace(/"/g, "&quot;")}">${url.replace(/</g, "&lt;")}</a>${ZW}`)
+      }
+      const formats = {
+        bold: () => exec("bold"),
+        italic: () => exec("italic"),
+        strike: () => exec("strikeThrough"),
+        code: toggleCode,
+        link: () => void addLink(),
+        list: () => exec("insertUnorderedList"),
+      }
+      // Turn Markdown typed by hand into formatting, so the box never shows the symbols.
+      const inputRules = (e: InputEvent) => {
+        if (e.inputType !== "insertText" || !edEl) return
+        const sel = getSelection()
+        const node = sel?.anchorNode
+        if (!sel?.isCollapsed || !node || node.nodeType !== 3) return
+        const text = node as Text
+        const before = text.data.slice(0, sel.anchorOffset)
+        if (e.data === " " && !closest("li")) {
+          const nl = before.lastIndexOf("\n")
+          const line = before.slice(nl + 1).replace(/\u200B/g, "")
+          const block = text.parentElement === edEl || /^(DIV|P)$/.test(text.parentElement?.tagName ?? "")
+          const lineStart = nl >= 0 || !text.previousSibling || text.previousSibling.nodeName === "BR" || /\n$/.test(text.previousSibling.textContent ?? "")
+          if (block && lineStart && /^[-*+] $|^1[.)] $/.test(line)) {
+            const r = document.createRange()
+            r.setStart(text, nl + 1)
+            r.setEnd(text, sel.anchorOffset)
+            sel.removeAllRanges()
+            sel.addRange(r)
+            document.execCommand("delete")
+            document.execCommand(line.startsWith("1") ? "insertOrderedList" : "insertUnorderedList")
+            return
+          }
+        }
+        if (closest("code")) return
+        for (const [re, tag] of INLINE_RULES) {
+          const m = re.exec(before)
+          if (!m) continue
+          // The match may start with one boundary character that isn't part of the markup.
+          const lead = /^[*_`~]/.test(m[0]) ? 0 : 1
+          const r = document.createRange()
+          r.setStart(text, sel.anchorOffset - m[0].length + lead)
+          r.setEnd(text, sel.anchorOffset)
+          r.deleteContents()
+          const el = document.createElement(tag)
+          el.textContent = m[1]
+          r.insertNode(el)
+          caretAfter(el)
+          break
+        }
       }
       const addNote = () => {
         const text = draft().trim()
@@ -1006,61 +1071,78 @@ export default Plugin.define({
               </Show>
               <div class="btwn-fmt" role="toolbar" aria-label="Formatting">
                 <ui.Tooltip value="Bold" keys={["⌘", "B"]}>
-                  <button aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("**")}>
+                  <button aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={formats.bold}>
                     <Bold size={14} />
                   </button>
                 </ui.Tooltip>
                 <ui.Tooltip value="Italic" keys={["⌘", "I"]}>
-                  <button aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("_")}>
+                  <button aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={formats.italic}>
                     <Italic size={14} />
                   </button>
                 </ui.Tooltip>
                 <ui.Tooltip value="Strikethrough">
-                  <button aria-label="Strikethrough" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("~~")}>
+                  <button aria-label="Strikethrough" onMouseDown={(e) => e.preventDefault()} onClick={formats.strike}>
                     <Strikethrough size={14} />
                   </button>
                 </ui.Tooltip>
                 <span class="btwn-fmt-sep" />
                 <ui.Tooltip value="Code" keys={["⌘", "E"]}>
-                  <button aria-label="Code" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("`", "`", "code")}>
+                  <button aria-label="Code" onMouseDown={(e) => e.preventDefault()} onClick={formats.code}>
                     <Code size={14} />
                   </button>
                 </ui.Tooltip>
                 <ui.Tooltip value="Link" keys={["⌘", "K"]}>
-                  <button aria-label="Link" onMouseDown={(e) => e.preventDefault()} onClick={link}>
+                  <button aria-label="Link" onMouseDown={(e) => e.preventDefault()} onClick={formats.link}>
                     <Link size={14} />
                   </button>
                 </ui.Tooltip>
                 <ui.Tooltip value="Bulleted list">
-                  <button aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={() => prefixLines("- ")}>
+                  <button aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={formats.list}>
                     <List size={14} />
                   </button>
                 </ui.Tooltip>
               </div>
-              <div class="btwn-ed">
-              <div class="btwn-hl" aria-hidden="true" ref={hlEl} innerHTML={highlight(draft())} />
-              <textarea
-                ref={taEl}
+              <div
+                ref={edEl}
                 class="btwn-ta"
-                onScroll={(e) => hlEl && (hlEl.scrollTop = e.currentTarget.scrollTop)}
+                contentEditable
+                role="textbox"
+                aria-multiline="true"
                 aria-label="Note or /btw question"
-                placeholder="Write a note in Markdown (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
-                value={draft()}
-                onInput={(e) => setDraft(e.currentTarget.value)}
+                data-empty={empty()}
+                data-placeholder="Write a note (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
+                onInput={(e) => {
+                  inputRules(e as InputEvent)
+                  sync()
+                }}
+                onPaste={(e) => {
+                  e.preventDefault()
+                  document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "")
+                  sync()
+                }}
                 onKeyDown={(e) => {
-                  const fmt = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && shortcuts[e.key.toLowerCase()]
-                  if (fmt) {
+                  const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey
+                  const key = e.key.toLowerCase()
+                  if (mod && (key === "b" || key === "i" || key === "e" || key === "k" || key === "u")) {
                     e.preventDefault()
-                    fmt()
+                    if (key === "b") formats.bold()
+                    if (key === "i") formats.italic()
+                    if (key === "e") formats.code()
+                    if (key === "k") formats.link()
                     return
                   }
-                  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+                  if (e.key !== "Enter" || e.isComposing) return
+                  if (e.shiftKey) {
+                    // Shift+Enter: a new list item inside a list (an empty one ends the list), else a line break.
                     e.preventDefault()
-                    addNote()
+                    exec(closest("li") ? "insertParagraph" : "insertLineBreak")
+                    return
                   }
+                  e.preventDefault()
+                  sync()
+                  addNote()
                 }}
               />
-              </div>
               <div class="btwn-models btwn-menu">
                 <ui.Menu
                   trigger="button"
