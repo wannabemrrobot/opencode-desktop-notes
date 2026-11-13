@@ -1,10 +1,12 @@
-import { createSignal } from "solid-js"
+import { For, Show, createSignal } from "solid-js"
 import { render } from "solid-js/web"
 import plugin from "../src/gui"
 import { ui } from "./mock-gui"
 
 const params = new URLSearchParams(location.search)
 document.documentElement.dataset.theme = params.get("theme") ?? "light"
+// ?record: a full app-like layout (sidebar, chat, notes at 27% width) used to record docs/demo.gif.
+const recording = params.has("record")
 
 const day = (h: number, m: number, daysAgo = 0) => {
   const d = new Date()
@@ -45,6 +47,7 @@ const notes = {
     },
   ],
 }
+if (recording) notes.items = notes.items.filter((i) => i.id === "n1" || i.id === "b1")
 const todos = {
   todos: [
     { id: "t1", text: "Add a size cap to the response cache", done: false, time: day(9, 0) },
@@ -87,11 +90,37 @@ const data = {
     },
   },
 }
+type Msg = { role: "user" | "assistant"; text: string }
+const [chat, setChat] = createSignal<Msg[]>([
+  { role: "user", text: "Add an in-memory response cache to the API client." },
+  {
+    role: "assistant",
+    text: "Done. Responses are cached in memory for five minutes, keyed by the request URL. Only GET requests are cached, and a write to the same URL clears its entry.",
+  },
+  { role: "user", text: "Now add retries with backoff for failed requests." },
+  { role: "assistant", text: "Retries now use exponential backoff: 200 ms, 400 ms, then 800 ms, and only for network errors and 5xx responses." },
+])
+const [toasts, setToasts] = createSignal<string[]>([])
+const toast = (t: { title: string }) => {
+  setToasts((l) => [...l, t.title])
+  setTimeout(() => setToasts((l) => l.slice(1)), 2200)
+}
+const BTW_ANSWER =
+  "Mostly. Two things to watch:\n\n- Invalidate on writes, or users can see stale data for up to 5 minutes.\n- Memory grows with unique URLs, so add a size cap."
+const answer = () => new Promise<{ text: string }>((r) => setTimeout(() => r({ text: BTW_ANSWER }), 1600))
+
 const session: any = {
   id: "ses_demo",
   key: "local\nses_demo",
   directory: "/Users/you/projects/acme-api",
-  server: { id: "local", data, client: { session: { generate: async () => ({ text: "…" }), prompt: async () => {} }, experimental: { generate: { text: async () => ({ text: "…" }) } } } },
+  server: {
+    id: "local",
+    data,
+    client: {
+      session: { generate: answer, prompt: async (o: { text: string }) => void setChat((c) => [...c, { role: "user", text: o.text }]) },
+      experimental: { generate: { text: answer } },
+    },
+  },
 }
 
 const added: Record<string, any[]> = {}
@@ -107,7 +136,7 @@ const ctx: any = {
   sessions: { current: () => session },
   screen: { current: () => undefined },
   layout: { open() {}, state: () => "visible" },
-  toast: { show() {} },
+  toast: { show: toast },
   dialogs: { prompt: async () => undefined },
   system: { save: async () => true, copy: async () => {} },
 }
@@ -120,8 +149,7 @@ document.head.append(css)
 const panel = added.Panel[0]
 const tab = panel.list({ session, open: ["session"] })[0]
 const projectTab = panel.list({ session, open: ["project"] })[0]
-render(
-  () => (
+const Panel = () => (
     <div class="frame">
       <div class="tabs">
         <div class="tab active">{tab.label({ active: true, preview: false, session })}<span class="x">×</span></div>
@@ -130,7 +158,33 @@ render(
       </div>
       <div class="body">{panel.render({ tab, session, screen: {} })}</div>
     </div>
-  ),
+)
+render(
+  () =>
+    recording ? (
+      <div class="app">
+        <aside class="side">
+          <div class="side-h">acme-api</div>
+          <div class="side-i active">Add caching to the API client</div>
+          <div class="side-i">Retry with backoff</div>
+          <div class="side-i">Fix flaky upload test</div>
+        </aside>
+        <main class="chat">
+          <div class="chat-h">Add caching to the API client</div>
+          <div class="chat-list">
+            <For each={chat()}>{(m) => <div class={`msg ${m.role}`}>{m.text}</div>}</For>
+          </div>
+          <div class="composer">Ask anything, / for commands, @ for context…</div>
+        </main>
+        <Panel />
+        <div class="toasts">
+          <For each={toasts()}>{(t) => <div class="toast">{t}</div>}</For>
+        </div>
+        <div id="caption" />
+      </div>
+    ) : (
+      <Panel />
+    ),
   document.getElementById("app")!,
 )
 

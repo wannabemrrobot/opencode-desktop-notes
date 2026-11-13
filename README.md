@@ -5,7 +5,7 @@ A notes, side-question and todo panel for [OpenCode Desktop](https://opencode.ai
 Jot things down while the agent works, ask the model side questions without touching the main chat, quote parts of the conversation, keep a todo list, and send any of it back to the agent when you're ready.
 
 <p align="center">
-  <img src="docs/demo.gif" width="960" alt="Adding notes, annotating a chat passage, asking /btw, using todos, session context, search and Notes only in OpenCode Desktop">
+  <img src="docs/demo.gif" width="960" alt="Captioned walkthrough in light and dark themes: Markdown notes, annotating chat text, /btw, editing in place, collapsing and archiving notes, /todo and sending todos to the agent, Send to chat, session context, search and Notes only">
 </p>
 
 > [!NOTE]
@@ -156,7 +156,7 @@ bun run demo       # build a browser preview with a mock host, in demo/dist
 
 - `src/gui.tsx` is the whole plugin. It builds to `dist/gui-experimental.cjs`, the file OpenCode loads.
 - `dist/` is committed so installing from GitHub needs no build step. Rebuild before you commit.
-- `demo/` runs the real panel against a small mock of the OpenCode host, for quick UI work without the desktop app. Build it with `bun run demo`, serve `demo/dist`, and open `index.html` (add `?theme=dark` for the dark theme).
+- `demo/` runs the real panel against a small mock of the OpenCode host, for quick UI work without the desktop app. Build it with `bun run demo`, serve `demo/dist`, and open `index.html` (add `?theme=dark` for the dark theme, or `?record` for the full-window layout used to record `docs/demo.gif`).
 
 ## License
 
