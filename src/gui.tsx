@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createRoot, createSignal, For, getOwner, onCleanup, onMount, runWithOwner, Show } from "solid-js"
 import { Schema } from "effect"
 import { ArrowDown, ArrowUp, Bold, ChevronRight, Code, Italic, Link, List, Strikethrough, ListTodo, Square, SquareCheck, X, Coins, Cpu, Download, MessageCircleQuestion, Pencil, Plus, Quote, Search, SendHorizontal, SquarePen, Trash2 } from "lucide-solid"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
@@ -249,17 +249,23 @@ export default Plugin.define({
     const setTitle = (scope: "session" | "project", session: any, title: string) =>
       ctx.stores.titles.set({ ...(ctx.stores.titles.value as Record<string, string>), [titleKey(scope, session)]: title })
 
+    // Shared todo stores live as long as the plugin. Creating one inside a panel would tie it to that
+    // panel, and a cached store would go dead when the panel re-renders or closes.
+    const root = getOwner()
+    const lasting = <T,>(make: () => T): T => (root ? runWithOwner(root, make)! : createRoot(make))
     const todoStores = new Map<string, ReturnType<typeof ctx.storage.store>>()
     const todoStoreFor = (scope: "session" | "project", session: any) => {
       const key = scope === "session" ? `s:${session.key}` : `p:${session.server.id}:${session.directory}`
       let st = todoStores.get(key)
       if (!st) {
-        st = ctx.storage.store(`${scope}-todos`, {
-          schema: Todos,
-          initial: { todos: [] },
-          from: `plugin.btw-notes.${scope}-todos`,
-          scope: scope === "session" ? { session } : { server: session.server.id, directory: session.directory },
-        })
+        st = lasting(() =>
+          ctx.storage.store(`${scope}-todos`, {
+            schema: Todos,
+            initial: { todos: [] },
+            from: `plugin.btw-notes.${scope}-todos`,
+            scope: scope === "session" ? { session } : { server: session.server.id, directory: session.directory },
+          }),
+        )
         todoStores.set(key, st)
       }
       return st
@@ -368,7 +374,7 @@ export default Plugin.define({
       const [panelOpen, setPanelOpen] = createSignal<"none" | "ctx" | "todo">("none")
       const showCtx = () => panelOpen() === "ctx"
       const toggle = (which: "ctx" | "todo") => setPanelOpen(panelOpen() === which ? "none" : which)
-      const todoStore = createMemo(() => todoStoreFor(props.scope, props.session))
+      const todoStore = () => todoStoreFor(props.scope, props.session)
       const todos = (): readonly (typeof Todo.Type)[] => (todoStore().value as any)?.todos ?? []
       const [todoDraft, setTodoDraft] = createSignal("")
       const todoDone = () => todos().filter((t) => t.done).length
