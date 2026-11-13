@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Schema } from "effect"
-import { ArrowDown, ArrowUp, ChevronRight, ListTodo, Square, SquareCheck, X, Coins, Cpu, Download, MessageCircleQuestion, Pencil, Plus, Quote, Search, SendHorizontal, SquarePen, Trash2 } from "lucide-solid"
+import { ArrowDown, ArrowUp, Bold, ChevronRight, Code, Italic, Link, List, Strikethrough, ListTodo, Square, SquareCheck, X, Coins, Cpu, Download, MessageCircleQuestion, Pencil, Plus, Quote, Search, SendHorizontal, SquarePen, Trash2 } from "lucide-solid"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { Command, MenuItem, Panel, Plugin, Store, Style, type PanelTab } from "@opencode/plugin/gui"
 
@@ -78,6 +78,11 @@ const css = `
 .btwn-row{border:1px solid color-mix(in srgb,currentColor 14%,transparent);border-radius:8px;padding:8px 10px}
 .btwn-btw{border-style:dashed}
 .btwn-text{white-space:pre-wrap;word-break:break-word}
+.btwn-md{white-space:normal}
+.btwn-fmt{display:flex;align-items:center;gap:2px;padding:4px 6px 0}
+.btwn-fmt button{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.6;cursor:pointer}
+.btwn-fmt button:hover{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
+.btwn-fmt-sep{width:1px;height:14px;margin:0 3px;background:color-mix(in srgb,currentColor 18%,transparent)}
 .btwn-q{opacity:.65;white-space:pre-wrap;margin-bottom:6px}
 .btwn-quote{margin:0 0 6px;padding:2px 8px;border-left:3px solid color-mix(in srgb,currentColor 35%,transparent);opacity:.75;font-style:italic;cursor:pointer;white-space:pre-wrap;word-break:break-word;max-height:9em;overflow:auto}
 .btwn-acts{display:flex;justify-content:flex-end;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -459,6 +464,52 @@ export default Plugin.define({
         reveal(item.id)
       }
 
+      let taEl: HTMLTextAreaElement | undefined
+      const edit = (next: string, start: number, end: number) => {
+        setDraft(next)
+        queueMicrotask(() => {
+          if (!taEl) return
+          taEl.value = next
+          taEl.focus()
+          taEl.setSelectionRange(start, end)
+        })
+      }
+      const wrap = (before: string, after = before, placeholder = "text") => {
+        const el = taEl
+        if (!el) return
+        const v = el.value, a = el.selectionStart, b = el.selectionEnd
+        const sel = v.slice(a, b) || placeholder
+        // Toggle off when the selection is already wrapped.
+        if (v.slice(a - before.length, a) === before && v.slice(b, b + after.length) === after)
+          return edit(v.slice(0, a - before.length) + v.slice(a, b) + v.slice(b + after.length), a - before.length, b - before.length)
+        edit(v.slice(0, a) + before + sel + after + v.slice(b), a + before.length, a + before.length + sel.length)
+      }
+      const prefixLines = (prefix: string) => {
+        const el = taEl
+        if (!el) return
+        const v = el.value
+        const a = v.lastIndexOf("\n", el.selectionStart - 1) + 1
+        const bi = v.indexOf("\n", el.selectionEnd)
+        const b = bi === -1 ? v.length : bi
+        const lines = v.slice(a, b).split("\n")
+        const on = lines.every((l) => l.startsWith(prefix))
+        const out = lines.map((l) => (on ? l.slice(prefix.length) : prefix + l)).join("\n")
+        edit(v.slice(0, a) + out + v.slice(b), a, a + out.length)
+      }
+      const link = () => {
+        const el = taEl
+        if (!el) return
+        const v = el.value, a = el.selectionStart, b = el.selectionEnd
+        const label = v.slice(a, b) || "link"
+        const text = `[${label}](url)`
+        edit(v.slice(0, a) + text + v.slice(b), a + label.length + 3, a + label.length + 6)
+      }
+      const shortcuts: Record<string, () => void> = {
+        b: () => wrap("**"),
+        i: () => wrap("_"),
+        e: () => wrap("`", "`", "code"),
+        k: link,
+      }
       const addNote = () => {
         const text = draft().trim()
         if (!text) return
@@ -845,7 +896,7 @@ export default Plugin.define({
                     </Show>
                     <Show
                       when={item.kind === "btw"}
-                      fallback={<div class="btwn-text">{item.text}</div>}
+                      fallback={<ui.Markdown class="btwn-text btwn-md" text={item.text} />}
                     >
                       <div class="btwn-q">/btw {item.text}{item.model ? <span class="btwn-via"> · {item.model}</span> : null}</div>
                       <ui.Markdown text={item.answer} />
@@ -886,13 +937,53 @@ export default Plugin.define({
                   {pendingQuote()}
                 </div>
               </Show>
+              <div class="btwn-fmt" role="toolbar" aria-label="Formatting">
+                <ui.Tooltip value="Bold" keys={["⌘", "B"]}>
+                  <button aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("**")}>
+                    <Bold size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Italic" keys={["⌘", "I"]}>
+                  <button aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("_")}>
+                    <Italic size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Strikethrough">
+                  <button aria-label="Strikethrough" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("~~")}>
+                    <Strikethrough size={14} />
+                  </button>
+                </ui.Tooltip>
+                <span class="btwn-fmt-sep" />
+                <ui.Tooltip value="Code" keys={["⌘", "E"]}>
+                  <button aria-label="Code" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap("`", "`", "code")}>
+                    <Code size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Link" keys={["⌘", "K"]}>
+                  <button aria-label="Link" onMouseDown={(e) => e.preventDefault()} onClick={link}>
+                    <Link size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Bulleted list">
+                  <button aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={() => prefixLines("- ")}>
+                    <List size={14} />
+                  </button>
+                </ui.Tooltip>
+              </div>
               <textarea
+                ref={taEl}
                 class="btwn-ta"
                 aria-label="Note or /btw question"
-                placeholder="Write a note (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
+                placeholder="Write a note in Markdown (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
                 value={draft()}
                 onInput={(e) => setDraft(e.currentTarget.value)}
                 onKeyDown={(e) => {
+                  const fmt = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && shortcuts[e.key.toLowerCase()]
+                  if (fmt) {
+                    e.preventDefault()
+                    fmt()
+                    return
+                  }
                   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
                     e.preventDefault()
                     addNote()
