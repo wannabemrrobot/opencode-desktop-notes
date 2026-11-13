@@ -109,6 +109,8 @@ Select text in the conversation, then press **Annotate** (or <kbd>⌘</kbd><kbd>
 
 Open **Todo** under the search bar. Add items, tick them off, clear finished ones. The **Todo 2/4** count stays on the button while it's closed.
 
+You can also add a todo without opening the list: type `/todo Write retry tests` in the notes box, or run it in the chat prompt. A todo from the chat prompt goes to that session's list. The count updates right away.
+
 Hover a todo and press **Agent** to hand it to the agent with optional instructions. It goes in as a queued message, so a running turn finishes first.
 
 

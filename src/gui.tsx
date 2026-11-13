@@ -243,6 +243,28 @@ export default Plugin.define({
     const setTitle = (scope: "session" | "project", session: any, title: string) =>
       ctx.stores.titles.set({ ...(ctx.stores.titles.value as Record<string, string>), [titleKey(scope, session)]: title })
 
+    const todoStores = new Map<string, ReturnType<typeof ctx.storage.store>>()
+    const todoStoreFor = (scope: "session" | "project", session: any) => {
+      const key = scope === "session" ? `s:${session.key}` : `p:${session.server.id}:${session.directory}`
+      let st = todoStores.get(key)
+      if (!st) {
+        st = ctx.storage.store(`${scope}-todos`, {
+          schema: Todos,
+          initial: { todos: [] },
+          from: `plugin.btw-notes.${scope}-todos`,
+          scope: scope === "session" ? { session } : { server: session.server.id, directory: session.directory },
+        })
+        todoStores.set(key, st)
+      }
+      return st
+    }
+    const pushTodo = (scope: "session" | "project", session: any, text: string) => {
+      const st = todoStoreFor(scope, session)
+      const list = ((st.value as any)?.todos ?? []) as readonly (typeof Todo.Type)[]
+      st.set({ todos: [...list, { id: crypto.randomUUID(), text, done: false, time: Date.now() }] })
+    }
+    const todoCommand = /^\/todo(?:\s+([\s\S]*))?$/i
+
     const Notes = (props: { scope: "session" | "project"; session: any }) => {
       const store = createMemo(() =>
         ctx.storage.store(`${props.scope}-notes`, {
@@ -340,25 +362,15 @@ export default Plugin.define({
       const [panelOpen, setPanelOpen] = createSignal<"none" | "ctx" | "todo">("none")
       const showCtx = () => panelOpen() === "ctx"
       const toggle = (which: "ctx" | "todo") => setPanelOpen(panelOpen() === which ? "none" : which)
-      const todoStore = createMemo(() =>
-        ctx.storage.store(`${props.scope}-todos`, {
-          schema: Todos,
-          initial: { todos: [] },
-          from: `plugin.btw-notes.${props.scope}-todos`,
-          scope:
-            props.scope === "session"
-              ? { session: props.session }
-              : { server: props.session.server.id, directory: props.session.directory },
-        }),
-      )
-      const todos = (): readonly (typeof Todo.Type)[] => todoStore().value?.todos ?? []
+      const todoStore = createMemo(() => todoStoreFor(props.scope, props.session))
+      const todos = (): readonly (typeof Todo.Type)[] => (todoStore().value as any)?.todos ?? []
       const [todoDraft, setTodoDraft] = createSignal("")
       const todoDone = () => todos().filter((t) => t.done).length
       const setTodos = (next: readonly (typeof Todo.Type)[]) => todoStore().set({ todos: next })
       const addTodo = () => {
         const text = todoDraft().trim()
         if (!text) return
-        setTodos([...todos(), { id: crypto.randomUUID(), text, done: false, time: Date.now() }])
+        pushTodo(props.scope, props.session, text)
         setTodoDraft("")
       }
       const [sendingTodo, setSendingTodo] = createSignal<string | null>(null)
@@ -449,6 +461,15 @@ export default Plugin.define({
       const addNote = () => {
         const text = draft().trim()
         if (!text) return
+        const asTodo = text.match(todoCommand)
+        if (asTodo) {
+          const todo = (asTodo[1] ?? "").trim()
+          if (!todo) return void ctx.toast.show({ variant: "error", title: "Type the todo after /todo" })
+          pushTodo(props.scope, props.session, todo)
+          setDraft("")
+          ctx.toast.show({ variant: "success", title: "Added to todos" })
+          return
+        }
         append(store(), { id: crypto.randomUUID(), kind: "note", text, answer: "", quote: pendingQuote(), time: Date.now() })
         setDraft("")
         setPendingQuote("")
@@ -867,7 +888,7 @@ export default Plugin.define({
               <textarea
                 class="btwn-ta"
                 aria-label="Note or /btw question"
-                placeholder="Write a note (Enter), a /btw question, or a comment to send. Shift+Enter for a new line."
+                placeholder="Write a note (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
                 value={draft()}
                 onInput={(e) => setDraft(e.currentTarget.value)}
                 onKeyDown={(e) => {
@@ -968,6 +989,24 @@ export default Plugin.define({
     }
     ctx.add(Command, (): Command => ({ id: "open-session", title: "Notes: session notes", run: () => open("session") }))
     ctx.add(Command, (): Command => ({ id: "open-project", title: "Notes: project notes", run: () => open("project") }))
+    ctx.add(Command, (): Command => ({
+      id: "todo",
+      title: "Notes: add a todo",
+      description: "Adds the text after /todo to this session's todos",
+      slash: { name: "todo", arguments: true },
+      enabled: !!ctx.sessions.current(),
+      run: (input) => {
+        const session = ctx.sessions.current()
+        const text = input?.trim()
+        if (!session) return
+        if (!text) {
+          ctx.toast.show({ variant: "error", title: "Type the todo after /todo" })
+          return
+        }
+        pushTodo("session", session, text)
+        ctx.toast.show({ variant: "success", title: "Added to todos", description: text })
+      },
+    }))
     ctx.add(Command, (): Command => ({
       id: "annotate",
       title: "Notes: annotate selected chat text",
