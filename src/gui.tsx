@@ -160,9 +160,9 @@ const css = `
 .btwn-search input::-webkit-search-cancel-button{display:none;-webkit-appearance:none}
 .btwn-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);z-index:1;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.55;cursor:pointer}
 .btwn-clear:hover{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
-.btwn-row .btwn-acts{opacity:0;pointer-events:none;transition:opacity .12s}
-.btwn-row:hover .btwn-acts,.btwn-row:focus-within .btwn-acts{opacity:1;pointer-events:auto}
-@media (hover:none){.btwn-row .btwn-acts{opacity:1;pointer-events:auto}}
+.btwn-row .btwn-acts{max-height:0;margin-top:0;overflow:hidden;opacity:0;pointer-events:none;transition:max-height .15s ease,margin-top .15s ease,opacity .12s}
+.btwn-row:hover .btwn-acts,.btwn-row:focus-within .btwn-acts{max-height:120px;margin-top:8px;opacity:1;pointer-events:auto}
+@media (hover:none){.btwn-row .btwn-acts{max-height:none;margin-top:8px;opacity:1;pointer-events:auto}}
 .btwn-in{position:relative;padding:8px 12px;box-shadow:0 -22px 26px -6px color-mix(in srgb,var(--background-base,Canvas) 94%,transparent),0 -8px 14px -2px color-mix(in srgb,var(--background-base,Canvas) 75%,transparent);display:flex;flex-direction:column;gap:8px}
 .btwn-box{container-type:inline-size;display:flex;flex-direction:column;border:0;box-shadow:var(--shadow-xs-border-base,0 0 0 1px color-mix(in srgb,currentColor 22%,transparent));border-radius:10px;overflow:hidden}
 .btwn-box:focus-within{box-shadow:var(--shadow-xs-border-select,0 0 0 1px var(--border-selected,#004afffc),0 0 0 3px var(--border-weak-selected,#0167ff4a))}
