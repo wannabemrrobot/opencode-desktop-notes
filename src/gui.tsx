@@ -47,6 +47,48 @@ const transcript = (messages: readonly any[]) => {
 const fmtTokens = (n: number) =>
   n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n)
 const RING = 2 * Math.PI * 7.5
+// Live Markdown styling for the prompt box. The real textarea sits on top with transparent text, so
+// typing, the caret, selection, undo and IME all stay native. Every style here keeps glyph widths
+// identical to plain text (no size, weight or font changes), or the caret would drift.
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+const mk = (cls: string, t: string) => `<span class="${cls}">${escapeHtml(t)}</span>`
+const slant = (html: string) => html.replace(/(^|>)([^<]+)(?=<|$)/g, (_, a, t) => a + t.replace(/\S+/g, (w: string) => `<span class="md-sk">${w}</span>`))
+const INLINE: [RegExp, (m: RegExpExecArray) => string][] = [
+  [/`([^`\n]+)`/, (m) => mk("md-mk", "`") + mk("md-code", m[1]) + mk("md-mk", "`")],
+  [/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/, (m) => { const t = m[0].slice(0, 2); return mk("md-mk", t) + `<span class="md-b">${inline(m[1] ?? m[2])}</span>` + mk("md-mk", t) }],
+  [/~~([^~\n]+?)~~/, (m) => mk("md-mk", "~~") + `<span class="md-s">${inline(m[1])}</span>` + mk("md-mk", "~~")],
+  [/(?<![\w*])\*(?!\s)([^*\n]+?)\*(?!\w)|(?<!\w)_(?!\s)([^_\n]+?)_(?!\w)/, (m) => { const t = m[0][0]; return mk("md-mk", t) + slant(inline(m[1] ?? m[2])) + mk("md-mk", t) }],
+  [/\[([^\]\n]+)\]\(([^)\s]*)\)/, (m) => mk("md-mk", "[") + `<span class="md-a">${inline(m[1])}</span>` + mk("md-mk", `](${m[2]})`)],
+  [/https?:\/\/[^\s)]+/, (m) => mk("md-a", m[0])],
+]
+function inline(t: string): string {
+  let best: { i: number; m: RegExpExecArray; f: (m: RegExpExecArray) => string } | undefined
+  for (const [re, f] of INLINE) {
+    const m = re.exec(t)
+    if (m && (!best || m.index < best.i)) best = { i: m.index, m, f }
+  }
+  if (!best) return escapeHtml(t)
+  return escapeHtml(t.slice(0, best.i)) + best.f(best.m) + inline(t.slice(best.i + best.m[0].length))
+}
+const highlight = (text: string) => {
+  let fence = false
+  const out = text.split("\n").map((line) => {
+    if (/^\s*```/.test(line)) {
+      fence = !fence
+      return mk("md-mk md-pre", line)
+    }
+    if (fence) return mk("md-pre", line)
+    let m: RegExpMatchArray | null
+    if ((m = line.match(/^(#{1,6} )(.*)$/))) return mk("md-mk", m[1]) + `<span class="md-h">${inline(m[2])}</span>`
+    if ((m = line.match(/^(\s*>\s?)(.*)$/))) return mk("md-mk", m[1]) + `<span class="md-q">${slant(inline(m[2]))}</span>`
+    if ((m = line.match(/^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s)?(.*)$/)))
+      return escapeHtml(m[1]) + mk("md-li", m[2]) + m[3] + (m[4] ? mk("md-li", m[4]) : "") + inline(m[5])
+    return inline(line)
+  })
+  // A trailing newline needs something after it, or the last empty line has no height.
+  return out.join("\n") + (text.endsWith("\n") ? " " : "")
+}
+
 const fmtTime = (t: number) => {
   const d = new Date(t)
   const now = new Date()
@@ -168,8 +210,21 @@ const css = `
 .btwn-box:focus-within{box-shadow:var(--shadow-xs-border-select,0 0 0 1px var(--border-selected,#004afffc),0 0 0 3px var(--border-weak-selected,#0167ff4a))}
 .btwn-box .btwn-quote{margin:8px 10px 0;max-height:6em}
 .btwn-ta:focus,.btwn-ta:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
-.btwn-ta{display:block;box-sizing:border-box;width:100%;min-height:72px;max-height:220px;field-sizing:content;padding:10px 12px;border:0;outline:0;resize:none;background:transparent;color:inherit;font:inherit;font-size:13.5px;line-height:1.45}
-.btwn-ta::placeholder{color:color-mix(in srgb,currentColor 45%,transparent)}
+.btwn-ed{position:relative}
+.btwn-ta,.btwn-hl{box-sizing:border-box;width:100%;margin:0;padding:10px 12px;border:0;font:inherit;font-size:13.5px;line-height:1.45;letter-spacing:normal;font-kerning:none;font-variant-ligatures:none;tab-size:4;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;scrollbar-gutter:stable}
+.btwn-ta{position:relative;z-index:1;display:block;min-height:72px;max-height:33vh;field-sizing:content;overflow-y:auto;outline:0;resize:none;background:transparent;color:inherit;caret-color:auto;-webkit-text-fill-color:transparent}
+.btwn-ta::selection{background:color-mix(in srgb,var(--border-selected,#3b82f6) 28%,transparent);-webkit-text-fill-color:transparent}
+.btwn-hl{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:inherit}
+.btwn-hl .md-mk{opacity:.4}
+.btwn-hl .md-b,.btwn-hl .md-h{-webkit-text-stroke:.45px currentColor}
+.btwn-hl .md-h{color:var(--text-strong,inherit)}
+.btwn-hl .md-sk{display:inline-block;transform:skewX(-9deg)}
+.btwn-hl .md-s{text-decoration:line-through;text-decoration-color:color-mix(in srgb,currentColor 60%,transparent)}
+.btwn-hl .md-code,.btwn-hl .md-pre{border-radius:3px;background:color-mix(in srgb,currentColor 11%,transparent)}
+.btwn-hl .md-a{color:var(--text-interactive-base,#4c8dff);text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent)}
+.btwn-hl .md-li{color:var(--text-interactive-base,#4c8dff)}
+.btwn-hl .md-q{opacity:.75}
+.btwn-ta::placeholder{color:color-mix(in srgb,currentColor 45%,transparent);-webkit-text-fill-color:color-mix(in srgb,currentColor 45%,transparent)}
 .btwn-empty{opacity:.55;text-align:center;padding:24px 8px}
 `
 
@@ -471,6 +526,12 @@ export default Plugin.define({
       }
 
       let taEl: HTMLTextAreaElement | undefined
+      let hlEl: HTMLDivElement | undefined
+      // Keep the styled copy scrolled with the textarea after every change (field-sizing can scroll it).
+      createEffect(() => {
+        draft()
+        queueMicrotask(() => taEl && hlEl && (hlEl.scrollTop = taEl.scrollTop))
+      })
       const edit = (next: string, start: number, end: number) => {
         setDraft(next)
         queueMicrotask(() => {
@@ -976,9 +1037,12 @@ export default Plugin.define({
                   </button>
                 </ui.Tooltip>
               </div>
+              <div class="btwn-ed">
+              <div class="btwn-hl" aria-hidden="true" ref={hlEl} innerHTML={highlight(draft())} />
               <textarea
                 ref={taEl}
                 class="btwn-ta"
+                onScroll={(e) => hlEl && (hlEl.scrollTop = e.currentTarget.scrollTop)}
                 aria-label="Note or /btw question"
                 placeholder="Write a note in Markdown (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
                 value={draft()}
@@ -996,6 +1060,7 @@ export default Plugin.define({
                   }
                 }}
               />
+              </div>
               <div class="btwn-models btwn-menu">
                 <ui.Menu
                   trigger="button"

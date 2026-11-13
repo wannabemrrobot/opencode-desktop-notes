@@ -86,8 +86,8 @@ Every row has a small badge in its top-right corner:
 | `/btw` | A side question and its answer |
 | Quote + `/btw` | A side question about a chat passage |
 
-- **Add a note:** type in the box at the bottom and press **Enter**. **Shift+Enter** starts a new line.
-- **Markdown:** notes are written and shown in Markdown. Use the toolbar above the text for bold, italic, strikethrough, code, links and lists, or <kbd>⌘</kbd><kbd>B</kbd> / <kbd>I</kbd> / <kbd>E</kbd> / <kbd>K</kbd>. Clicking a button again removes that formatting.
+- **Add a note:** type in the box at the bottom and press **Enter**. **Shift+Enter** starts a new line. The box grows with your text up to a third of the window, then scrolls.
+- **Markdown:** notes are written and shown in Markdown, and the box styles it as you type. Use the toolbar above the text for bold, italic, strikethrough, code, links and lists, or <kbd>⌘</kbd><kbd>B</kbd> / <kbd>I</kbd> / <kbd>E</kbd> / <kbd>K</kbd>. Clicking a button again removes that formatting.
 - **Ask /btw:** type a question and press **/btw**. The answer comes from the session's context, but nothing is written to the chat history and the running turn isn't interrupted.
 - **Threads:** each /btw includes your notes and the earlier side Q&A, so the thread builds on itself. Use **Follow-up /btw** on an answer to keep going.
 - **Model picker:** the picker inside the prompt box chooses the model for /btw. **Session model** uses the session's own context. Any other model gets the chat's text (not tool calls or reasoning) plus your notes.
