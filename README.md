@@ -87,7 +87,7 @@ Every row has a small badge in its top-right corner:
 | Quote + `/btw` | A side question about a chat passage |
 
 - **Add a note:** type in the box at the bottom and press **Enter**. **Shift+Enter** starts a new line. The box grows with your text up to a third of the window, then scrolls.
-- **Edit a note:** hover it and click **Edit**. It loads back into the box with its formatting; **Enter** or **Save** saves it, **Esc** or **Cancel** leaves it as it was.
+- **Edit a note:** hover it and click **Edit** to edit it right where it is, with the same formatting toolbar. **Enter** or **Save** saves it, **Esc** or **Cancel** leaves it as it was.
 - **Formatting:** the box is a small rich-text editor. Use the toolbar, <kbd>⌘</kbd><kbd>B</kbd> / <kbd>I</kbd> / <kbd>E</kbd> / <kbd>K</kbd>, or type Markdown (`**bold**`, `_italic_`, `` `code` ``, `~~strike~~`, `- ` for a list) and it turns into formatting as you type. Notes are saved and shown as Markdown.
 - **Ask /btw:** type a question and press **/btw**. The answer comes from the session's context, but nothing is written to the chat history and the running turn isn't interrupted.
 - **Threads:** each /btw includes your notes and the earlier side Q&A, so the thread builds on itself. Use **Follow-up /btw** on an answer to keep going.

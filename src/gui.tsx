@@ -247,7 +247,10 @@ const css = `
 .btwn-box .btwn-quote{margin:8px 10px 0;max-height:6em}
 .btwn-ta:focus,.btwn-ta:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
 .btwn-box{position:relative}
-.btwn-editbar{display:flex;align-items:center;justify-content:space-between;padding:0 2px 0 4px;font-size:12px;color:var(--text-interactive-base,#4c8dff)}
+.btwn-rowedit{margin-top:2px}
+.btwn-rowedit .btwn-ta{min-height:40px}
+.btwn-editacts{display:flex;justify-content:flex-end;gap:6px;padding:0 8px 8px}
+.btwn-acts[hidden]{display:none!important}
 .btwn-row[data-editing=true]{box-shadow:0 0 0 1px var(--border-selected,#4c8dff)}
 .btwn-ta{display:block;box-sizing:border-box;width:100%;min-height:72px;max-height:33vh;overflow-y:auto;padding:10px 12px;outline:0;font:inherit;font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
 .btwn-ta[data-empty=true]::before{content:attr(data-placeholder);position:absolute;pointer-events:none;color:color-mix(in srgb,currentColor 45%,transparent)}
@@ -556,9 +559,10 @@ export default Plugin.define({
       }
 
       let edEl: HTMLDivElement | undefined
+      let cur: HTMLDivElement | undefined
       const [empty, setEmpty] = createSignal(true)
       const sync = () => {
-        if (!edEl) return
+        if (!edEl || (cur && cur !== edEl)) return
         const md = toMarkdown(edEl)
         setEmpty(!md && !edEl.querySelector("li"))
         if (md !== draft()) setDraft(md)
@@ -571,14 +575,14 @@ export default Plugin.define({
         }
       })
       const exec = (cmd: string, value?: string) => {
-        edEl?.focus()
+        ;(cur ?? edEl)?.focus()
         document.execCommand(cmd, false, value)
         sync()
       }
       const closest = (tag: string) => {
         const n = getSelection()?.anchorNode
         const el = (n && (n.nodeType === 1 ? (n as Element) : n.parentElement))?.closest(tag)
-        return el && edEl?.contains(el) ? el : null
+        return el && (cur ?? edEl)?.contains(el) ? el : null
       }
       const caretAfter = (node: Node) => {
         const gap = document.createTextNode(ZW)
@@ -591,7 +595,7 @@ export default Plugin.define({
         sel.addRange(r)
       }
       const toggleCode = () => {
-        edEl?.focus()
+        ;(cur ?? edEl)?.focus()
         const inCode = closest("code")
         if (inCode) {
           inCode.replaceWith(document.createTextNode(inCode.textContent ?? ""))
@@ -620,8 +624,9 @@ export default Plugin.define({
           inLink.replaceWith(document.createTextNode(inLink.textContent ?? ""))
           return sync()
         }
+        const target = cur ?? edEl
         const url = (await ctx.dialogs.prompt({ title: "Add link", placeholder: "https://", submit: "Add" }))?.trim()
-        edEl?.focus()
+        target?.focus()
         if (!url) return
         if (saved) {
           sel!.removeAllRanges()
@@ -640,7 +645,8 @@ export default Plugin.define({
       }
       // Turn Markdown typed by hand into formatting, so the box never shows the symbols.
       const inputRules = (e: InputEvent) => {
-        if (e.inputType !== "insertText" || !edEl) return
+        const root = cur ?? edEl
+        if (e.inputType !== "insertText" || !root) return
         const sel = getSelection()
         const node = sel?.anchorNode
         if (!sel?.isCollapsed || !node || node.nodeType !== 3) return
@@ -649,7 +655,7 @@ export default Plugin.define({
         if (e.data === " " && !closest("li")) {
           const nl = before.lastIndexOf("\n")
           const line = before.slice(nl + 1).replace(/\u200B/g, "")
-          const block = text.parentElement === edEl || /^(DIV|P)$/.test(text.parentElement?.tagName ?? "")
+          const block = text.parentElement === root || /^(DIV|P)$/.test(text.parentElement?.tagName ?? "")
           const lineStart = nl >= 0 || !text.previousSibling || text.previousSibling.nodeName === "BR" || /\n$/.test(text.previousSibling.textContent ?? "")
           if (block && lineStart && /^[-*+] $|^1[.)] $/.test(line)) {
             const r = document.createRange()
@@ -679,37 +685,91 @@ export default Plugin.define({
           break
         }
       }
+      const Toolbar = () => (
+              <div class="btwn-fmt" role="toolbar" aria-label="Formatting">
+                <ui.Tooltip value="Bold" keys={["⌘", "B"]}>
+                  <button aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={formats.bold}>
+                    <Bold size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Italic" keys={["⌘", "I"]}>
+                  <button aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={formats.italic}>
+                    <Italic size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Strikethrough">
+                  <button aria-label="Strikethrough" onMouseDown={(e) => e.preventDefault()} onClick={formats.strike}>
+                    <Strikethrough size={14} />
+                  </button>
+                </ui.Tooltip>
+                <span class="btwn-fmt-sep" />
+                <ui.Tooltip value="Code" keys={["⌘", "E"]}>
+                  <button aria-label="Code" onMouseDown={(e) => e.preventDefault()} onClick={formats.code}>
+                    <Code size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Link" keys={["⌘", "K"]}>
+                  <button aria-label="Link" onMouseDown={(e) => e.preventDefault()} onClick={formats.link}>
+                    <Link size={14} />
+                  </button>
+                </ui.Tooltip>
+                <ui.Tooltip value="Bulleted list">
+                  <button aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={formats.list}>
+                    <List size={14} />
+                  </button>
+                </ui.Tooltip>
+              </div>
+      )
       const [editing, setEditing] = createSignal<string | null>(null)
-      const loadEditor = (md: string) => {
-        if (!edEl) return
-        edEl.innerHTML = toEditorHtml(md)
-        sync()
-        edEl.focus()
-        const r = document.createRange()
-        r.selectNodeContents(edEl)
-        r.collapse(false)
-        getSelection()?.removeAllRanges()
-        getSelection()?.addRange(r)
-      }
-      const startEdit = (item: Item) => {
-        setEditing(item.id)
-        setPendingQuote(item.quote)
-        loadEditor(item.text)
-      }
+      const startEdit = (item: Item) => setEditing(item.id)
       const cancelEdit = () => {
         setEditing(null)
-        setDraft("")
-        setPendingQuote("")
+        cur = edEl
+      }
+      const saveEdit = (el: HTMLDivElement, id: string) => {
+        const text = toMarkdown(el).trim()
+        if (!text) return void ctx.toast.show({ variant: "error", title: "A note can't be empty. Delete it instead." })
+        store().set({ items: items().map((i) => (i.id === id ? { ...i, text } : i)) })
+        cancelEdit()
+      }
+      const mountEditor = (el: HTMLDivElement, md: string) => {
+        el.innerHTML = toEditorHtml(md)
+        cur = el
+        requestAnimationFrame(() => {
+          el.focus()
+          el.scrollIntoView({ block: "nearest" })
+          const r = document.createRange()
+          r.selectNodeContents(el)
+          r.collapse(false)
+          getSelection()?.removeAllRanges()
+          getSelection()?.addRange(r)
+        })
+      }
+      // Shared keys for both editors: formatting shortcuts, Shift+Enter, Enter submits, Esc cancels.
+      const editorKeys = (e: KeyboardEvent, submit: () => void, cancel?: () => void) => {
+        const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey
+        const key = e.key.toLowerCase()
+        if (mod && (key === "b" || key === "i" || key === "e" || key === "k" || key === "u")) {
+          e.preventDefault()
+          if (key === "b") formats.bold()
+          if (key === "i") formats.italic()
+          if (key === "e") formats.code()
+          if (key === "k") formats.link()
+          return
+        }
+        if (e.key === "Escape" && cancel) {
+          e.preventDefault()
+          cancel()
+          return
+        }
+        if (e.key !== "Enter" || e.isComposing) return
+        e.preventDefault()
+        // Shift+Enter: a new list item inside a list (an empty one ends the list), else a line break.
+        if (e.shiftKey) exec(closest("li") ? "insertParagraph" : "insertLineBreak")
+        else submit()
       }
       const addNote = () => {
         const text = draft().trim()
-        const id = editing()
-        if (id) {
-          if (!text) return void ctx.toast.show({ variant: "error", title: "A note can't be empty. Delete it instead." })
-          store().set({ items: items().map((i) => (i.id === id ? { ...i, text, quote: pendingQuote() } : i)) })
-          cancelEdit()
-          return
-        }
         if (!text) return
         const asTodo = text.match(todoCommand)
         if (asTodo) {
@@ -1097,7 +1157,44 @@ export default Plugin.define({
                     </Show>
                     <Show
                       when={item.kind === "btw"}
-                      fallback={<ui.Markdown class="btwn-text btwn-md" text={item.text} />}
+                      fallback={
+                        <Show when={editing() === item.id} fallback={<ui.Markdown class="btwn-text btwn-md" text={item.text} />}>
+                          {(() => {
+                            let el!: HTMLDivElement
+                            return (
+                              <div class="btwn-box btwn-rowedit">
+                                <Toolbar />
+                                <div
+                                  ref={(e) => {
+                                    el = e
+                                    mountEditor(e, item.text)
+                                  }}
+                                  class="btwn-ta"
+                                  contentEditable
+                                  role="textbox"
+                                  aria-multiline="true"
+                                  aria-label="Edit note"
+                                  onFocus={() => (cur = el)}
+                                  onInput={(e) => inputRules(e as InputEvent)}
+                                  onPaste={(e) => {
+                                    e.preventDefault()
+                                    document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "")
+                                  }}
+                                  onKeyDown={(e) => editorKeys(e, () => saveEdit(el, item.id), cancelEdit)}
+                                />
+                                <div class="btwn-editacts">
+                                  <ui.Button size="small" variant="ghost-muted" onClick={cancelEdit}>
+                                    Cancel
+                                  </ui.Button>
+                                  <ui.Button size="small" variant="contrast" onClick={() => saveEdit(el, item.id)}>
+                                    <Lbl icon={SquareCheck} text="Save" />
+                                  </ui.Button>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </Show>
+                      }
                     >
                       <div class="btwn-q">/btw {item.text}{item.model ? <span class="btwn-via"> · {item.model}</span> : null}</div>
                       <ui.Markdown text={item.answer} />
@@ -1105,7 +1202,7 @@ export default Plugin.define({
                     <div class="btwn-time" title={new Date(item.time).toLocaleString()}>
                       {fmtTime(item.time)}
                     </div>
-                    <div class="btwn-acts">
+                    <div class="btwn-acts" hidden={editing() === item.id}>
                       <Show when={item.kind === "note"}>
                         <ui.Button onClick={() => startEdit(item)}>
                           <Lbl icon={Pencil} text="Edit" />
@@ -1137,56 +1234,13 @@ export default Plugin.define({
             </Show>
           </div>
           <div class="btwn-in">
-            <Show when={editing()}>
-              <div class="btwn-editbar">
-                <span class="btwn-lbl">
-                  <Pencil size={13} />
-                  Editing note
-                </span>
-                <ui.Button size="small" variant="ghost-muted" onClick={cancelEdit}>
-                  Cancel
-                </ui.Button>
-              </div>
-            </Show>
             <div class="btwn-box">
               <Show when={pendingQuote()}>
                 <div class="btwn-quote" onClick={() => setPendingQuote("")} title="Click to remove">
                   {pendingQuote()}
                 </div>
               </Show>
-              <div class="btwn-fmt" role="toolbar" aria-label="Formatting">
-                <ui.Tooltip value="Bold" keys={["⌘", "B"]}>
-                  <button aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={formats.bold}>
-                    <Bold size={14} />
-                  </button>
-                </ui.Tooltip>
-                <ui.Tooltip value="Italic" keys={["⌘", "I"]}>
-                  <button aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={formats.italic}>
-                    <Italic size={14} />
-                  </button>
-                </ui.Tooltip>
-                <ui.Tooltip value="Strikethrough">
-                  <button aria-label="Strikethrough" onMouseDown={(e) => e.preventDefault()} onClick={formats.strike}>
-                    <Strikethrough size={14} />
-                  </button>
-                </ui.Tooltip>
-                <span class="btwn-fmt-sep" />
-                <ui.Tooltip value="Code" keys={["⌘", "E"]}>
-                  <button aria-label="Code" onMouseDown={(e) => e.preventDefault()} onClick={formats.code}>
-                    <Code size={14} />
-                  </button>
-                </ui.Tooltip>
-                <ui.Tooltip value="Link" keys={["⌘", "K"]}>
-                  <button aria-label="Link" onMouseDown={(e) => e.preventDefault()} onClick={formats.link}>
-                    <Link size={14} />
-                  </button>
-                </ui.Tooltip>
-                <ui.Tooltip value="Bulleted list">
-                  <button aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={formats.list}>
-                    <List size={14} />
-                  </button>
-                </ui.Tooltip>
-              </div>
+              <Toolbar />
               <div
                 ref={edEl}
                 class="btwn-ta"
@@ -1205,33 +1259,13 @@ export default Plugin.define({
                   document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "")
                   sync()
                 }}
-                onKeyDown={(e) => {
-                  const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey
-                  const key = e.key.toLowerCase()
-                  if (mod && (key === "b" || key === "i" || key === "e" || key === "k" || key === "u")) {
-                    e.preventDefault()
-                    if (key === "b") formats.bold()
-                    if (key === "i") formats.italic()
-                    if (key === "e") formats.code()
-                    if (key === "k") formats.link()
-                    return
-                  }
-                  if (e.key === "Escape" && editing()) {
-                    e.preventDefault()
-                    cancelEdit()
-                    return
-                  }
-                  if (e.key !== "Enter" || e.isComposing) return
-                  if (e.shiftKey) {
-                    // Shift+Enter: a new list item inside a list (an empty one ends the list), else a line break.
-                    e.preventDefault()
-                    exec(closest("li") ? "insertParagraph" : "insertLineBreak")
-                    return
-                  }
-                  e.preventDefault()
-                  sync()
-                  addNote()
-                }}
+                onFocus={() => (cur = edEl)}
+                onKeyDown={(e) =>
+                  editorKeys(e, () => {
+                    sync()
+                    addNote()
+                  })
+                }
               />
               <div class="btwn-models btwn-menu">
                 <ui.Menu
@@ -1257,9 +1291,7 @@ export default Plugin.define({
             <div class="btwn-grid btwn-grid3 btwn-bottom">
               <div class="btwn-cell">
                 <ui.Button size="small" variant="contrast" onClick={addNote}>
-                  <Show when={editing()} fallback={<Lbl icon={Plus} text="Add note" />}>
-                    <Lbl icon={SquareCheck} text="Save" />
-                  </Show>
+                  <Lbl icon={Plus} text="Add note" />
                 </ui.Button>
               </div>
               <div class="btwn-cell">
