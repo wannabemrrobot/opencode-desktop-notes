@@ -87,7 +87,8 @@ const css = `
 .btwn-toggle{flex:none;display:flex;align-items:center;gap:8px;white-space:nowrap}
 .btwn-vsep{flex:none;align-self:stretch;width:1px;margin:4px 0;background:color-mix(in srgb,currentColor 18%,transparent)}
 .btwn-wipe{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;opacity:.6;cursor:pointer}
-.btwn-wipe:hover:not(:disabled){opacity:1;color:#e5484d;background:color-mix(in srgb,#e5484d 10%,transparent)}
+.btwn-wipe:hover:not(:disabled),.btwn-wipe:focus-visible:not(:disabled),*:hover>.btwn-wipe:not(:disabled):hover{opacity:1!important;color:#e5484d!important;background:color-mix(in srgb,#e5484d 12%,transparent)!important}
+.btwn-wipe:hover:not(:disabled) svg,.btwn-wipe:focus-visible:not(:disabled) svg{color:#e5484d!important;stroke:#e5484d!important}
 .btwn-wipe:disabled{opacity:.25;cursor:default}
 .btwn-toggle>*{flex:none}
 .btwn-togglelbl{cursor:pointer;user-select:none}
