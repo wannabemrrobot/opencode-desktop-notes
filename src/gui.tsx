@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createRoot, createSignal, For, getOwner, onCleanup, onMount, runWithOwner, Show } from "solid-js"
 import { Schema } from "effect"
-import { ArrowDown, ArrowUp, Bold, ChevronRight, Code, Italic, Link, List, Strikethrough, ListTodo, Square, SquareCheck, X, Coins, Cpu, Download, MessageCircleQuestion, Pencil, Plus, Quote, Search, SendHorizontal, SquarePen, Trash2 } from "lucide-solid"
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Bold, ChevronDown, ChevronRight, Code, Italic, Link, List, Strikethrough, ListTodo, Square, SquareCheck, X, Coins, Cpu, Download, MessageCircleQuestion, Pencil, Plus, Quote, Search, SendHorizontal, SquarePen, Trash2 } from "lucide-solid"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { Command, MenuItem, Panel, Plugin, Store, Style, type PanelTab } from "@opencode/plugin/gui"
 
@@ -12,6 +12,8 @@ const Item = Schema.Struct({
   quote: Schema.String, // annotated chat text, "" for none
   time: Schema.Number,
   model: Schema.optionalKey(Schema.String), // display name of a non-default /btw model
+  collapsed: Schema.optionalKey(Schema.Boolean), // folded to one line; a click on the line opens it
+  archived: Schema.optionalKey(Schema.Boolean), // folded in place; only Unarchive opens it
 })
 const Data = Schema.Struct({ items: Schema.Array(Item) })
 const Todo = Schema.Struct({ id: Schema.String, text: Schema.String, done: Schema.Boolean, time: Schema.Number })
@@ -125,6 +127,13 @@ const INLINE_RULES: [RegExp, string][] = [
   [/(?:^|[^\w_])_([^_\s][^_\n]*)_$/, "em"],
 ]
 
+// One plain line for a folded row: the first non-empty line, Markdown symbols removed.
+const summary = (i: { kind: string; text: string; quote: string }) => {
+  const line = (i.text.split("\n").map((l) => l.trim()).find(Boolean) ?? i.quote.trim()).replace(/^(#{1,6}|>|[-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, "")
+  const plain = line.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*\*|__|~~|`|(?<!\w)[*_](?=\S)|(?<=\S)[*_](?!\w)/g, "")
+  return (i.kind === "btw" ? "/btw " : "") + plain
+}
+
 const fmtTime = (t: number) => {
   const d = new Date(t)
   const now = new Date()
@@ -229,7 +238,25 @@ const css = `
 .btwn-models button{max-width:220px}
 .btwn-menu button::after{content:"";display:inline-block;width:10px;height:10px;margin-left:4px;background:currentColor;opacity:.7;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat}
 .btwn-search{position:relative}
-.btwn-badge{float:right;display:inline-flex;align-items:center;gap:4px;margin:0 0 4px 8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;line-height:16px;background:color-mix(in srgb,currentColor 10%,transparent);opacity:.85}
+.btwn-tr{float:right;position:relative;z-index:1;display:flex;align-items:center;gap:2px;margin:0 0 4px 8px}
+.btwn-fold{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.5;cursor:pointer}
+.btwn-fold:hover,.btwn-fold:focus-visible{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
+.btwn-archbtn{visibility:hidden}
+.btwn-row:hover .btwn-archbtn,.btwn-row:focus-within .btwn-archbtn{visibility:visible}
+@media (hover:none){.btwn-archbtn{visibility:visible}}
+.btwn-row[data-collapsed=true]{padding:4px 6px 4px 8px}
+.btwn-sum{display:flex;align-items:center;gap:6px;box-sizing:border-box;width:100%;min-width:0;min-height:26px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+button.btwn-sum{cursor:pointer;border-radius:4px}
+button.btwn-sum:hover .btwn-sumtext{opacity:1}
+.btwn-sum>svg{flex:none;opacity:.55}
+.btwn-sumtext{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
+.btwn-arch{flex:none;font-size:11px;opacity:.55}
+.btwn-row[data-archived=true]{border-style:dashed;background:color-mix(in srgb,currentColor 3%,transparent)}
+.btwn-row[data-archived=true] .btwn-sumtext{opacity:.55}
+.btwn-row[data-collapsed=true]{container-type:inline-size}
+@container (max-width:300px){.btwn-arch{display:none}}
+@container (max-width:220px){.btwn-sum .btwn-t{display:none}}
+.btwn-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;line-height:16px;background:color-mix(in srgb,currentColor 10%,transparent);opacity:.85}
 .btwn-del{background:#e5484d!important;border-color:#e5484d!important;color:#fff!important}
 .btwn-del:hover{background:#d13a3f!important}
 .btwn-del svg{color:#fff!important}
@@ -521,7 +548,7 @@ export default Plugin.define({
         if (q && listEl) {
           const walker = document.createTreeWalker(listEl, NodeFilter.SHOW_TEXT, {
             acceptNode: (n) =>
-              n.parentElement?.closest(".btwn-acts,.btwn-badge") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+              n.parentElement?.closest(".btwn-acts,.btwn-badge,.btwn-arch") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
           })
           for (let n = walker.nextNode(); n; n = walker.nextNode()) {
             const text = n.nodeValue!.toLowerCase()
@@ -720,6 +747,8 @@ export default Plugin.define({
                 </ui.Tooltip>
               </div>
       )
+      const patch = (id: string, change: Partial<Item>) =>
+        store().set({ items: items().map((i) => (i.id === id ? { ...i, ...change } : i)) })
       const [editing, setEditing] = createSignal<string | null>(null)
       const startEdit = (item: Item) => setEditing(item.id)
       const cancelEdit = () => {
@@ -729,7 +758,7 @@ export default Plugin.define({
       const saveEdit = (el: HTMLDivElement, id: string) => {
         const text = toMarkdown(el).trim()
         if (!text) return void ctx.toast.show({ variant: "error", title: "A note can't be empty. Delete it instead." })
-        store().set({ items: items().map((i) => (i.id === id ? { ...i, text } : i)) })
+        patch(id, { text })
         cancelEdit()
       }
       const mountEditor = (el: HTMLDivElement, md: string) => {
@@ -863,7 +892,7 @@ export default Plugin.define({
         const body = shown()
           .map((i) =>
             [
-              `### ${i.kind === "btw" ? `/btw ${i.text}` : "Note"} · ${new Date(i.time).toLocaleString()}`,
+              `### ${i.kind === "btw" ? `/btw ${i.text}` : "Note"} · ${new Date(i.time).toLocaleString()}${i.archived ? " · archived" : ""}`,
               i.quote && quote(i.quote),
               i.kind === "btw" ? i.answer : i.text,
             ]
@@ -1143,13 +1172,54 @@ export default Plugin.define({
             <Show when={shown().length || pending().length} fallback={<div class="btwn-empty">{query() ? "No matches" : "No notes yet"}</div>}>
               <For each={shown()}>
                 {(item) => (
-                  <div data-id={item.id} class={`btwn-row ${item.kind === "btw" ? "btwn-btw" : ""}`} data-editing={editing() === item.id}>
-                    <span class="btwn-badge" title={item.kind === "btw" ? (item.quote ? "Annotated /btw" : "/btw") : item.quote ? "Annotated note" : "Note"}>
-                      <Show when={item.quote || item.kind === "note"}>
-                        {item.quote ? <Quote size={13} /> : <SquarePen size={13} />}
+                  <div
+                    data-id={item.id}
+                    class={`btwn-row ${item.kind === "btw" ? "btwn-btw" : ""}`}
+                    data-editing={editing() === item.id}
+                    data-collapsed={!!(item.collapsed || item.archived)}
+                    data-archived={!!item.archived}
+                  >
+                    <Show
+                      when={!item.collapsed && !item.archived}
+                      fallback={
+                        <Show
+                          when={item.archived}
+                          fallback={
+                            <button class="btwn-sum" aria-expanded="false" title="Expand" onClick={() => patch(item.id, { collapsed: false })}>
+                              <ChevronRight size={14} />
+                              <span class="btwn-sumtext">{summary(item)}</span>
+                            </button>
+                          }
+                        >
+                          <div class="btwn-sum">
+                            <Archive size={14} />
+                            <span class="btwn-sumtext">{summary(item)}</span>
+                            <span class="btwn-arch">Archived</span>
+                            <ui.Button size="small" variant="ghost-muted" onClick={() => patch(item.id, { archived: false, collapsed: false })}>
+                              <Lbl icon={ArchiveRestore} text="Unarchive" />
+                            </ui.Button>
+                          </div>
+                        </Show>
+                      }
+                    >
+                    <div class="btwn-tr">
+                      <span class="btwn-badge" title={item.kind === "btw" ? (item.quote ? "Annotated /btw" : "/btw") : item.quote ? "Annotated note" : "Note"}>
+                        <Show when={item.quote || item.kind === "note"}>
+                          {item.quote ? <Quote size={13} /> : <SquarePen size={13} />}
+                        </Show>
+                        <Show when={item.kind === "btw"}>/btw</Show>
+                      </span>
+                      <Show when={editing() !== item.id}>
+                        <ui.Tooltip value="Archive">
+                          <button class="btwn-fold btwn-archbtn" aria-label="Archive" onClick={() => patch(item.id, { archived: true })}>
+                            <Archive size={14} />
+                          </button>
+                        </ui.Tooltip>
+                        <button class="btwn-fold" aria-expanded="true" aria-label="Collapse" title="Collapse" onClick={() => patch(item.id, { collapsed: true })}>
+                          <ChevronDown size={14} />
+                        </button>
                       </Show>
-                      <Show when={item.kind === "btw"}>/btw</Show>
-                    </span>
+                    </div>
                     <Show when={item.quote}>
                       <div class="btwn-quote" title="Jump to this text in the chat" onClick={() => go(item.quote)}>
                         {item.quote}
@@ -1218,6 +1288,7 @@ export default Plugin.define({
                         <Lbl icon={Trash2} text="Delete" />
                       </ui.Button>
                     </div>
+                    </Show>
                   </div>
                 )}
               </For>

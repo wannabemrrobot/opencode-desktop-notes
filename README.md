@@ -88,6 +88,8 @@ Every row has a small badge in its top-right corner:
 
 - **Add a note:** type in the box at the bottom and press **Enter**. **Shift+Enter** starts a new line. The box grows with your text up to a third of the window, then scrolls.
 - **Edit a note:** hover it and click **Edit** to edit it right where it is, with the same formatting toolbar. **Enter** or **Save** saves it, **Esc** or **Cancel** leaves it as it was.
+- **Collapse a note:** click the chevron at its top right to fold it to one line. Click the line to open it again.
+- **Archive a note:** hover it and click the archive icon. It folds to one line marked *Archived* and stays where it is in the list. Clicking it doesn't open it; only **Unarchive** does.
 - **Formatting:** the box is a small rich-text editor. Use the toolbar, <kbd>⌘</kbd><kbd>B</kbd> / <kbd>I</kbd> / <kbd>E</kbd> / <kbd>K</kbd>, or type Markdown (`**bold**`, `_italic_`, `` `code` ``, `~~strike~~`, `- ` for a list) and it turns into formatting as you type. Notes are saved and shown as Markdown.
 - **Ask /btw:** type a question and press **/btw**. The answer comes from the session's context, but nothing is written to the chat history and the running turn isn't interrupted.
 - **Threads:** each /btw includes your notes and the earlier side Q&A, so the thread builds on itself. Use **Follow-up /btw** on an answer to keep going.
