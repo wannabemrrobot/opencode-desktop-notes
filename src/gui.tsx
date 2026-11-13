@@ -85,6 +85,10 @@ const css = `
 .btwn-row1{display:flex;align-items:center;gap:8px;min-width:0}
 .btwn-search{flex:1 1 0;min-width:0}
 .btwn-toggle{flex:none;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.btwn-vsep{flex:none;align-self:stretch;width:1px;margin:4px 0;background:color-mix(in srgb,currentColor 18%,transparent)}
+.btwn-wipe{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;opacity:.6;cursor:pointer}
+.btwn-wipe:hover:not(:disabled){opacity:1;color:#e5484d;background:color-mix(in srgb,#e5484d 10%,transparent)}
+.btwn-wipe:disabled{opacity:.25;cursor:default}
 .btwn-toggle>*{flex:none}
 .btwn-togglelbl{cursor:pointer;user-select:none}
 @container (max-width:300px){.btwn-toggle .btwn-togglelbl span{display:none}}
@@ -553,6 +557,17 @@ export default Plugin.define({
         if (title) setTitle(props.scope, props.session, title)
       }
 
+      const wipe = async () => {
+        const n = items().length
+        if (!n) return
+        const ok = await ctx.dialogs.confirm({
+          title: `Delete all ${props.scope} notes?`,
+          description: `This removes ${n === 1 ? "1 note" : `${n} notes and /btw answers`} from this tab. Todos are kept. This can't be undone.`,
+          confirm: "Delete all",
+          danger: true,
+        })
+        if (ok) store().set({ items: [] })
+      }
       const remove = (id: string) => store().set({ items: items().filter((i) => i.id !== id) })
       const annotate = () => {
         if (lastSelection) setPendingQuote(lastSelection)
@@ -595,6 +610,17 @@ export default Plugin.define({
                   onChange={(v: boolean) => ctx.stores.prefs.set({ hideBtw: v })}
                 />
               </div>
+              <span class="btwn-vsep" aria-hidden="true" />
+              <ui.Tooltip value={`Delete all ${props.scope} notes`}>
+                <button
+                  class="btwn-wipe"
+                  aria-label={`Delete all ${props.scope} notes`}
+                  disabled={!items().length}
+                  onClick={() => void wipe()}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </ui.Tooltip>
             </div>
             <div class="btwn-grid btwn-grid3 btwn-top">
               <div class="btwn-cell btwn-menu">

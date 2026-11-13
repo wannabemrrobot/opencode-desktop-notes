@@ -121,6 +121,7 @@ Hover a todo and press **Agent** to hand it to the agent with optional instructi
 
 - **Search** filters notes, questions, answers and quotes, and highlights the matches.
 - **Notes only** hides /btw rows.
+- **Delete all** (the trash icon beside Notes only) clears every note and /btw in the tab, after asking. Todos are kept.
 - **Sort** switches between oldest and newest first.
 - **Export** saves what's on screen as a Markdown file.
 - **Rename** gives the tab its own title.
