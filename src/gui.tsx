@@ -62,10 +62,11 @@ function toMarkdown(root: Node): string {
     const inner = [...el.childNodes].map(inline).join("")
     if (!inner.trim()) return inner
     const style = el.style
-    if (tag === "STRONG" || tag === "B" || Number(style.fontWeight) >= 600 || style.fontWeight === "bold") return `**${inner}**`
-    if (tag === "EM" || tag === "I" || style.fontStyle === "italic") return `_${inner}_`
-    if (tag === "S" || tag === "STRIKE" || tag === "DEL" || style.textDecorationLine.includes("line-through")) return `~~${inner}~~`
-    if (tag === "CODE") return "`" + inner + "`"
+    const wrap = (m: string) => inner.split("\n").map((l) => l.replace(/^(\s*)(.*?)(\s*)$/, (all, a, t, b) => (t ? a + m + t + m + b : all))).join("\n")
+    if (tag === "STRONG" || tag === "B" || Number(style.fontWeight) >= 600 || style.fontWeight === "bold") return wrap("**")
+    if (tag === "EM" || tag === "I" || style.fontStyle === "italic") return wrap("_")
+    if (tag === "S" || tag === "STRIKE" || tag === "DEL" || style.textDecorationLine.includes("line-through")) return wrap("~~")
+    if (tag === "CODE") return wrap("`")
     if (tag === "A") return `[${inner}](${el.getAttribute("href") ?? ""})`
     if (tag === "UL" || tag === "OL") return "\n" + list(el) + "\n"
     if (/^(DIV|P|H[1-6]|BLOCKQUOTE|LI)$/.test(tag)) return "\n" + inner + "\n"
@@ -83,6 +84,21 @@ function toMarkdown(root: Node): string {
     .replace(/^\n+|\n+$/g, "")
     .replace(/([^\n])\n(?=[^\n])/g, (m, c, i, all) => (/^\s*([-*+]|\d+[.)]) /.test(all.slice(i + 2)) ? m : `${c}  \n`))
 }
+// Repairs notes saved by the old bug above: "**line  \n**next" becomes "**line**  \nnext".
+const count = (t: string, m: string) => t.split(m).length - 1
+function repairMarkers(md: string): string {
+  const lines = md.split("\n")
+  for (const m of ["**", "~~"])
+    for (let i = 0; i + 1 < lines.length; i++) {
+      const next = lines[i + 1].trimStart()
+      if (count(lines[i], m) % 2 && next.startsWith(m) && count(next, m) % 2) {
+        lines[i] = lines[i].replace(/(\S)(\s*)$/, `$1${m}$2`)
+        lines[i + 1] = next.slice(m.length)
+      }
+    }
+  return lines.join("\n")
+}
+
 function toEditorHtml(md: string): string {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
   const inl = (t: string) =>
@@ -120,11 +136,11 @@ function toEditorHtml(md: string): string {
 
 // Markdown typed inline, matched just before the caret: **bold**, _italic_ / *italic*, ~~strike~~, `code`.
 const INLINE_RULES: [RegExp, string][] = [
-  [/\*\*([^*\n]+)\*\*$/, "strong"],
-  [/~~([^~\n]+)~~$/, "s"],
+  [/\*\*([^*\s](?:[^*\n]*[^*\s])?)\*\*$/, "strong"],
+  [/~~([^~\s](?:[^~\n]*[^~\s])?)~~$/, "s"],
   [/`([^`\n]+)`$/, "code"],
-  [/(?:^|[^\w*])\*([^*\s][^*\n]*)\*$/, "em"],
-  [/(?:^|[^\w_])_([^_\s][^_\n]*)_$/, "em"],
+  [/(?:^|[^\w*])\*([^*\s](?:[^*\n]*[^*\s])?)\*$/, "em"],
+  [/(?:^|[^\w_])_([^_\s](?:[^_\n]*[^_\s])?)_$/, "em"],
 ]
 
 // One plain line for a folded row: the first non-empty line, Markdown symbols removed.
@@ -418,6 +434,11 @@ export default Plugin.define({
         }),
       )
       const items = (): readonly Item[] => store().value?.items ?? []
+      createEffect(() => {
+        const list = items()
+        if (list.some((i) => i.kind === "note" && repairMarkers(i.text) !== i.text))
+          store().set({ items: list.map((i) => (i.kind === "note" ? { ...i, text: repairMarkers(i.text) } : i)) })
+      })
       const [draft, setDraft] = createSignal("")
       const [pending, setPending] = createSignal<{ id: string; q: string }[]>([])
       const data = () => props.session.server.data
