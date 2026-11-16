@@ -156,7 +156,19 @@ const paintMatches = () => {
   else registry.delete("btwn-search")
 }
 
+// Slash command at the start of each notes box, highlighted with the CSS Custom Highlight API so the
+// editor's DOM (and the caret) is never touched.
+const commands = new Map<object, Range>()
+const paintCommands = () => {
+  const Highlight = (globalThis as any).Highlight
+  const registry = (globalThis as any).CSS?.highlights
+  if (!Highlight || !registry) return
+  if (commands.size) registry.set("btwn-cmd", new Highlight(...commands.values()))
+  else registry.delete("btwn-cmd")
+}
+
 const css = `
+::highlight(btwn-cmd){color:var(--text-interactive-base,#4c8dff);background-color:color-mix(in srgb,var(--text-interactive-base,#4c8dff) 14%,transparent)}
 ::highlight(btwn-search){background-color:color-mix(in srgb,#f5c518 55%,transparent);color:inherit}
 .btwn-lbl{display:inline-flex;align-items:center;gap:6px}
 .btwn{display:flex;flex-direction:column;height:100%;min-height:0;font-size:13px}
@@ -390,7 +402,8 @@ export default Plugin.define({
       const list = ((st.value as any)?.todos ?? []) as readonly (typeof Todo.Type)[]
       st.set({ todos: [...list, { id: crypto.randomUUID(), text, done: false, time: Date.now() }] })
     }
-    const todoCommand = /^\/todo(?:\s+([\s\S]*))?$/i
+    // A command only counts at the very start of the box: /todo, /btw or /note, then a space or the end.
+    const slashCommand = /^\/(todo|btw|note)(?:\s+([\s\S]*))?$/i
 
     const Notes = (props: { scope: "session" | "project"; session: any }) => {
       const store = createMemo(() =>
@@ -588,8 +601,26 @@ export default Plugin.define({
       let edEl: HTMLDivElement | undefined
       let cur: HTMLDivElement | undefined
       const [empty, setEmpty] = createSignal(true)
+      const cmdKey = {}
+      const markCommand = () => {
+        commands.delete(cmdKey)
+        const first = edEl && document.createTreeWalker(edEl, NodeFilter.SHOW_TEXT).nextNode()
+        const m = first && /^[\s\u00A0\u200B]*\/(todo|btw|note)(?=[\s\u00A0]|$)/i.exec((first as Text).data)
+        if (m) {
+          const r = document.createRange()
+          r.setStart(first!, m[0].indexOf("/"))
+          r.setEnd(first!, m[0].length)
+          commands.set(cmdKey, r)
+        }
+        paintCommands()
+      }
+      onCleanup(() => {
+        commands.delete(cmdKey)
+        paintCommands()
+      })
       const sync = () => {
         if (!edEl || (cur && cur !== edEl)) return
+        markCommand()
         const md = toMarkdown(edEl)
         setEmpty(!md && !edEl.querySelector("li"))
         if (md !== draft()) setDraft(md)
@@ -599,6 +630,7 @@ export default Plugin.define({
         if (draft() === "" && edEl && toMarkdown(edEl) !== "") {
           edEl.innerHTML = ""
           setEmpty(true)
+          markCommand()
         }
       })
       const exec = (cmd: string, value?: string) => {
@@ -800,16 +832,24 @@ export default Plugin.define({
       const addNote = () => {
         const text = draft().trim()
         if (!text) return
-        const asTodo = text.match(todoCommand)
-        if (asTodo) {
-          const todo = (asTodo[1] ?? "").trim()
-          if (!todo) return void ctx.toast.show({ variant: "error", title: "Type the todo after /todo" })
-          pushTodo(props.scope, props.session, todo)
+        const cmd = text.match(slashCommand)
+        const name = cmd?.[1].toLowerCase()
+        const rest = (cmd?.[2] ?? "").trim()
+        if (cmd && !rest) return void ctx.toast.show({ variant: "error", title: `Type the ${name === "btw" ? "question" : name} after /${name}` })
+        if (name === "todo") {
+          pushTodo(props.scope, props.session, rest)
           setDraft("")
           ctx.toast.show({ variant: "success", title: "Added to todos" })
           return
         }
-        append(store(), { id: crypto.randomUUID(), kind: "note", text, answer: "", quote: pendingQuote(), time: Date.now() })
+        if (name === "btw") {
+          const quote = pendingQuote()
+          setDraft("")
+          setPendingQuote("")
+          void ask(rest, quote)
+          return
+        }
+        append(store(), { id: crypto.randomUUID(), kind: "note", text: name === "note" ? rest : text, answer: "", quote: pendingQuote(), time: Date.now() })
         setDraft("")
         setPendingQuote("")
       }
@@ -1320,7 +1360,7 @@ export default Plugin.define({
                 aria-multiline="true"
                 aria-label="Note or /btw question"
                 data-empty={empty()}
-                data-placeholder="Write a note (Enter), /todo to add a todo, a /btw question, or a comment to send. Shift+Enter for a new line."
+                data-placeholder="Write a note and press Enter. Start with /todo, /btw or /note to add a todo, ask a side question or force a note. Shift+Enter for a new line."
                 onInput={(e) => {
                   inputRules(e as InputEvent)
                   sync()
@@ -1369,7 +1409,7 @@ export default Plugin.define({
                 <ui.Button
                   size="small"
                   onClick={() => {
-                    const q = draft()
+                    const q = draft().trim().replace(/^\/btw(?:\s+|$)/i, "")
                     const quote = pendingQuote()
                     setDraft("")
                     setPendingQuote("")

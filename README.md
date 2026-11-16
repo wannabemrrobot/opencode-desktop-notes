@@ -87,11 +87,12 @@ Every row has a small badge in its top-right corner:
 | Quote + `/btw` | A side question about a chat passage |
 
 - **Add a note:** type in the box at the bottom and press **Enter**. **Shift+Enter** starts a new line. The box grows with your text up to a third of the window, then scrolls.
+- **Slash commands:** start the box with `/todo`, `/btw` or `/note` and press **Enter** instead of using the buttons. `/todo Write retry tests` adds a todo, `/btw Is a 5 minute TTL safe?` asks a side question, and `/note …` always saves a note. The command is highlighted as you type.
 - **Edit a note:** hover it and click **Edit** to edit it right where it is, with the same formatting toolbar. **Enter** or **Save** saves it, **Esc** or **Cancel** leaves it as it was.
 - **Collapse a note:** click the chevron at its top right to fold it to one line. Click the line to open it again.
 - **Archive a note:** hover it and click the archive icon. It folds to one line marked *Archived* and stays where it is in the list. Clicking it doesn't open it; only **Unarchive** does.
 - **Formatting:** the box is a small rich-text editor. Use the toolbar, <kbd>⌘</kbd><kbd>B</kbd> / <kbd>I</kbd> / <kbd>E</kbd> / <kbd>K</kbd>, or type Markdown (`**bold**`, `_italic_`, `` `code` ``, `~~strike~~`, `- ` for a list) and it turns into formatting as you type. Notes are saved and shown as Markdown.
-- **Ask /btw:** type a question and press **/btw**. The answer comes from the session's context, but nothing is written to the chat history and the running turn isn't interrupted.
+- **Ask /btw:** type a question and press **/btw**, or start it with `/btw` and press **Enter**. The answer comes from the session's context, but nothing is written to the chat history and the running turn isn't interrupted.
 - **Threads:** each /btw includes your notes and the earlier side Q&A, so the thread builds on itself. Use **Follow-up /btw** on an answer to keep going.
 - **Model picker:** the picker inside the prompt box chooses the model for /btw. **Session model** uses the session's own context. Any other model gets the chat's text (not tool calls or reasoning) plus your notes.
 - **Times:** every row shows when it was added, such as "Today, 10:04".
